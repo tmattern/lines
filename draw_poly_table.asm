@@ -289,7 +289,7 @@ Line_HV_SetClear:
 LineSelfModSetClear:
     lda x0
     cmpa x1
-    bls .bg_dxpos
+    bls dx_pos
     lda x0
     suba x1
 
@@ -415,7 +415,7 @@ test_y
     lda y0
     adda bg_sy
     sta y0
-    bra Bres_loop
+    lbra Bres_loop
 
 Bres_end
     rts
