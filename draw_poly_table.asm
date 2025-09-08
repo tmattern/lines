@@ -1,391 +1,363 @@
 ; 6809 - Tracé/Effacement de polygone depuis un tableau de points
+; Compatible lwtools (lwasm)
 ; Ecran 320x200 1bpp, base $4000
 ; Entrée tableau: liste de X,Y,X,Y,..., dernier=premier pour polygone fermé
-; $20 = $FF (trace) ou $00 (efface)
+; mode = $FF (trace) ou $00 (efface)
 
-BASE    EQU $4000
-BPL     EQU 40         ; 320/8
+; ==== SECTION RAM (page zéro) ====
+            org $A000
+            lbra start
+x0          rmb 1
+y0          rmb 1
+x1          rmb 1
+y1          rmb 1
+mode        rmb 1
+tmp         rmb 2          ; pour STD/LDX tmp
+tmp2        rmb 2          ; pour une 2ème adresse, au besoin
+scratch     rmb 32         ; $10 à $2F pour variables temporaires
 
-; -- Variables page zéro --
-X0      EQU $00
-Y0      EQU $01
-X1      EQU $02
-Y1      EQU $03
-MODE    EQU $20        ; $FF: trace, $00: efface
+; ==== SECTION DONNÉES Et CODE ====
 
 ; --- TABLEAU DE POINTS EXEMPLE ---
-; Un rectangle  (fermé)
-POINTS
-    .FCB  20,30    ; X0,Y0
-    .FCB 150,30    ; X1,Y1
-    .FCB 150,100   ; ...
-    .FCB  20,100
-    .FCB  20,30    ; Retour au point de départ
+points      fcb 10,10
+            fcb 50,10
+            fcb 50,40
+            fcb 10,40
+            fcb 10,10
 
-NPTS    EQU 5      ; 5 points = 4 segments + fermeture
+npts        equ 5          ; 5 points = 4 segments + fermeture
+
+
+; --- Exemple d'appel dans ton programme principal ---
+start       ldy  #points
+            ldb  #4        ; 5 points = 4 segments (fermeture)
+            lda  #$FF      ; $FF: trace, $00: efface
+            sta  mode
+            jsr  DrawPolyTable
+            rts
+
 
 ; --- ROUTINE PRINCIPALE: Trace ou efface le polygone ---
-; Entrées : Y = adresse tableau, B = nombre de segments, MODE = $FF/$00
+; Entrées : Y = adresse du tableau, B = nombre de segments, mode = $FF/$00 en RAM
 DrawPolyTable:
-    LDA ,Y+        ; X0
-    STA X0
-    LDA ,Y+        ; Y0
-    STA Y0
+            lda ,y+        ; x0
+            sta x0
+            lda ,y+        ; y0
+            sta y0
 DrawPolyTable_Loop:
-    LDA ,Y+        ; X1
-    STA X1
-    LDA ,Y+        ; Y1
-    STA Y1
-    JSR Line_HV_SetClear
-    ; Préparer prochain segment
-    LDA X1
-    STA X0
-    LDA Y1
-    STA Y0
-    DECB
-    BNE DrawPolyTable_Loop
-    RTS
+            lda ,y+        ; x1
+            sta x1
+            lda ,y+        ; y1
+            sta y1
+            jsr Line_HV_SetClear
+            lda x1
+            sta x0
+            lda y1
+            sta y0
+            decb
+            bne DrawPolyTable_Loop
+            rts
 
 ; === ROUTINE LIGNE ULTRA-RAPIDE TRACE/EFFACE ===
-; Entrée: X0,Y0,X1,Y1, MODE
+; Entrée: x0,y0,x1,y1, mode
 Line_HV_SetClear:
-    LDA Y0
-    CMPA Y1
-    BNE .notHoriz
-    ; ----- HORIZONTALE -----
-    LDA X0
-    CMPA X1
-    BLS .lh_ok
-    LDA X0
-    LDB X1
-    STA X1
-    STB X0
+            lda y0
+            cmpa y1
+            lbne .notHoriz
+            ; ----- HORIZONTALE -----
+            lda x0
+            cmpa x1
+            bls .lh_ok
+            lda x0
+            ldb x1
+            sta x1
+            stb x0
 .lh_ok:
-    LDA Y0
-    LDB #BPL
-    MUL
-    ADDD #BASE
-    STD $10        ; $10 = base ligne
+            lda y0
+            ldb #40
+            mul
+            addd #$4000
+            std tmp
 
-    LDA X0
-    LSRA
-    LSRA
-    LSRA
-    STA $12        ; byte0
-    LDA X1
-    LSRA
-    LSRA
-    LSRA
-    STA $13        ; byte1
+            lda x0
+            lsra
+            lsra
+            lsra
+            sta $12
+            lda x1
+            lsra
+            lsra
+            lsra
+            sta $13
 
-    ; Masques début et fin
-    LDA X0
-    ANDA #7
-    EORA #7
-    LDB #1
-.lh_msk0:
-    CMPA #0
-    BEQ .lh_msk0ok
-    LSLB
-    DECA
-    BRA .lh_msk0
-.lh_msk0ok:
-    STB $14
-    LDA X1
-    ANDA #7
-    EORA #7
-    LDB #1
-.lh_msk1:
-    CMPA #0
-    BEQ .lh_msk1ok
-    LSLB
-    DECA
-    BRA .lh_msk1
-.lh_msk1ok:
-    STB $15
+            ; Masques début et fin
+            lda x0
+            anda #7
+            eora #7
+            ldb #1
+.lh_msk0:   cmpa #0
+            beq .lh_msk0ok
+            lslb
+            deca
+            bra .lh_msk0
+.lh_msk0ok: stb $14
+            lda x1
+            anda #7
+            eora #7
+            ldb #1
+.lh_msk1:   cmpa #0
+            beq .lh_msk1ok
+            lslb
+            deca
+            bra .lh_msk1
+.lh_msk1ok: stb $15
 
-    LDA $12
-    CMPA $13
-    BEQ .lh_samebyte
-    ; Plusieurs octets
-    LDX $10
-    LDA MODE
-    CMPA #$FF
-    BEQ .lh_set
-    ; ---- effacement ----
-    LDA #$FF
-    EORA $14
-    ANDA $12,X
-    STA $12,X
-    LDA #$FF
-    EORA $15
-    ANDA $13,X
-    STA $13,X
-    ; Octets pleins
-    LDA $12
-    INCA
-    STA $16
-    LDA $13
-    DECA
-    STA $17
-.lh_fillc:
-    LDA $16
-    CMPA $17
-    BGT .lh_out
-    LDA #$00   ; efface
-    STA A,X
-    INC $16
-    BRA .lh_fillc
-.lh_out:
-    RTS
+            lda $12
+            cmpa $13
+            beq .lh_samebyte
+            ; Plusieurs octets
+            ldx tmp
+            lda mode
+            cmpa #$FF
+            beq .lh_set
+            ; ---- effacement ----
+            lda #$FF
+            eora $14
+            anda $12,x
+            sta $12,x
+            lda #$FF
+            eora $15
+            anda $13,x
+            sta $13,x
+            ; Octets pleins
+            lda $12
+            inca
+            sta $16
+            lda $13
+            deca
+            sta $17
+.lh_fillc:  lda $16
+            cmpa $17
+            bgt .lh_out
+            lda #$00
+            sta a,x
+            inc $16
+            bra .lh_fillc
+.lh_out:    rts
 .lh_set:
-    ; ---- traçage ----
-    LDA $14
-    ORA $12,X
-    STA $12,X
-    LDA $15
-    ORA $13,X
-    STA $13,X
-    ; Octets pleins
-    LDA $12
-    INCA
-    STA $16
-    LDA $13
-    DECA
-    STA $17
-.lh_fills:
-    LDA $16
-    CMPA $17
-    BGT .lh_out2
-    LDA #$FF
-    STA A,X
-    INC $16
-    BRA .lh_fills
-.lh_out2:
-    RTS
+            lda $14
+            ora $12,x
+            sta $12,x
+            lda $15
+            ora $13,x
+            sta $13,x
+            ; Octets pleins
+            lda $12
+            inca
+            sta $16
+            lda $13
+            deca
+            sta $17
+.lh_fills:  lda $16
+            cmpa $17
+            bgt .lh_out2
+            lda #$FF
+            sta a,x
+            inc $16
+            bra .lh_fills
+.lh_out2:   rts
 .lh_samebyte:
-    LDX $10
-    LDA MODE
-    CMPA #$FF
-    BEQ .lh_sbset
-    ; effacement
-    LDA #$FF
-    EORA $14
-    EORA $15
-    ANDA $12,X
-    STA $12,X
-    RTS
+            ldx tmp
+            lda mode
+            cmpa #$FF
+            beq .lh_sbset
+            ; effacement
+            lda #$FF
+            eora $14
+            eora $15
+            anda $12,x
+            sta $12,x
+            rts
 .lh_sbset:
-    LDA $14
-    ORA $15
-    ORA $12,X
-    STA $12,X
-    RTS
+            lda $14
+            ora $15
+            ora $12,x
+            sta $12,x
+            rts
 
 ; ----- VERTICALE -----
 .notHoriz:
-    LDA X0
-    CMPA X1
-    BNE .notVert
-    LDA Y0
-    CMPA Y1
-    BLS .lv_ok
-    LDA Y0
-    LDB Y1
-    STA Y1
-    STB Y0
+            lda x0
+            cmpa x1
+            lbne .notVert
+            lda y0
+            cmpa y1
+            bls .lv_ok
+            lda y0
+            ldb y1
+            sta y1
+            stb y0
 .lv_ok:
-    LDA X0
-    LSRA
-    LSRA
-    LSRA
-    STA $18        ; offset_col
-    LDA X0
-    ANDA #7
-    EORA #7
-    LDB #1
-.lv_mask:
-    CMPA #0
-    BEQ .lv_maskok
-    LSLB
-    DECA
-    BRA .lv_mask
-.lv_maskok:
-    STB $19
-    LDA Y0
-    STA $1A
-    LDA MODE
-    CMPA #$FF
-    BEQ .lv_set
-    ; ---- effacement ----
-.lv_ce:
-    LDA $1A
-    CMPA Y1
-    BGT .lv_end
-    LDA $1A
-    LDB #BPL
-    MUL
-    ADDD #BASE
-    ADDB $18
-    LDX D
-    LDA #$FF
-    EORA $19
-    ANDA ,X
-    STA ,X
-    INC $1A
-    BRA .lv_ce
-.lv_set:
-    ; ---- traçage ----
-.lv_cs:
-    LDA $1A
-    CMPA Y1
-    BGT .lv_end
-    LDA $1A
-    LDB #BPL
-    MUL
-    ADDD #BASE
-    ADDB $18
-    LDX D
-    LDA ,X
-    ORA $19
-    STA ,X
-    INC $1A
-    BRA .lv_cs
-.lv_end:
-    RTS
+            lda x0
+            lsra
+            lsra
+            lsra
+            sta $18
+            lda x0
+            anda #7
+            eora #7
+            ldb #1
+.lv_mask:   cmpa #0
+            beq .lv_maskok
+            lslb
+            deca
+            bra .lv_mask
+.lv_maskok: stb $19
+            lda y0
+            sta $1A
+            lda mode
+            cmpa #$FF
+            beq .lv_set
+            ; ---- effacement ----
+.lv_ce:     lda $1A
+            cmpa y1
+            bgt .lv_end
+            lda $1A
+            ldb #40
+            mul
+            addd #$4000
+            addb $18
+            std tmp
+            ldx tmp
+            lda #$FF
+            eora $19
+            anda ,x
+            sta ,x
+            inc $1A
+            bra .lv_ce
+
+.lv_set:    ; ---- traçage ----
+.lv_cs:     lda $1A
+            cmpa y1
+            bgt .lv_end
+            lda $1A
+            ldb #40
+            mul
+            addd #$4000
+            addb $18
+            std tmp
+            ldx tmp
+            lda ,x
+            ora $19
+            sta ,x
+            inc $1A
+            bra .lv_cs
+.lv_end:    rts
 
 ; ----- Bresenham général (trace/efface) -----
 .notVert:
-    JSR LineSelfModSetClear   ; Routine Bresenham général (voir ci-dessous)
-    RTS
+            jsr LineSelfModSetClear
+            rts
 
-; === ROUTINE BRESENHAM GENERAL TRACE/EFFACE ($20) ===
-; Entrée: X0,Y0,X1,Y1, MODE
+; === ROUTINE BRESENHAM GENERAL TRACE/EFFAC (mode) ===
 LineSelfModSetClear:
-    ; dx, sx
-    LDA X0
-    CMPA X1
-    BLS .bg_dxpos
-    LDA X0
-    SUBA X1
-    STA $04
-    LDB #-1
-    STB $06
-    BRA .bg_dxok
+            lda x0
+            cmpa x1
+            bls .bg_dxpos
+            lda x0
+            suba x1
+            sta $04
+            ldb #-1
+            stb $06
+            bra .bg_dxok
 .bg_dxpos:
-    LDA X1
-    SUBA X0
-    STA $04
-    LDB #1
-    STB $06
+            lda x1
+            suba x0
+            sta $04
+            ldb #1
+            stb $06
 .bg_dxok:
-    ; dy, sy
-    LDA Y0
-    CMPA Y1
-    BLS .bg_dypos
-    LDA Y0
-    SUBA Y1
-    STA $05
-    LDB #-1
-    STB $07
-    BRA .bg_dyok
+            lda y0
+            cmpa y1
+            bls .bg_dypos
+            lda y0
+            suba y1
+            sta $05
+            ldb #-1
+            stb $07
+            bra .bg_dyok
 .bg_dypos:
-    LDA Y1
-    SUBA Y0
-    STA $05
-    LDB #1
-    STB $07
+            lda y1
+            suba y0
+            sta $05
+            ldb #1
+            stb $07
 .bg_dyok:
-    ; err = dx - dy
-    LDA $04
-    SUBA $05
-    STA $08
+            lda $04
+            suba $05
+            sta $08
 .bg_loop:
-    ; calcul adresse et masque
-    LDA Y0
-    LDB #BPL
-    MUL
-    ADDD #BASE
-    STD $10
-    LDA X0
-    LSRA
-    LSRA
-    LSRA
-    ADDA $10
-    STA $12
-    LDA X0
-    ANDA #7
-    EORA #7
-    LDB #1
-.bg_msk:
-    CMPA #0
-    BEQ .bg_mskok
-    LSLB
-    DECA
-    BRA .bg_msk
-.bg_mskok:
-    STB $13
-    ; traçage ou effacement
-    LDA MODE
-    CMPA #$FF
-    BEQ .bg_set
-    ; effacement
-    LDX $12
-    LDA #$FF
-    EORA $13
-    ANDA ,X
-    STA ,X
-    BRA .bg_next
-.bg_set:
-    LDX $12
-    LDA ,X
-    ORA $13
-    STA ,X
-.bg_next:
-    ; fin ?
-    LDA X0
-    CMPA X1
-    BNE .bg_notend
-    LDA Y0
-    CMPA Y1
-    BEQ .bg_end
-.bg_notend:
-    LDA $08
-    ASLA
-    STA $09   ; e2
-    LDA $09
-    CMPA #0
-    BPL .bg_skipx
-    LDA $08
-    SUBA $05
-    STA $08
-    LDA X0
-    ADDA $06
-    STA X0
-.bg_skipx:
-    LDA $09
-    CMPA $04
-    BMI .bg_skipy
-    LDA $08
-    ADDA $04
-    STA $08
-    LDA Y0
-    ADDA $07
-    STA Y0
-.bg_skipy:
-    BRA .bg_loop
-.bg_end:
-    RTS
+            lda y0
+            ldb #40
+            mul
+            addd #$4000
+            std tmp
+            lda x0
+            lsra
+            lsra
+            lsra
+            adda tmp
+            sta $12
+            lda x0
+            anda #7
+            eora #7
+            ldb #1
+.bg_msk:    cmpa #0
+            beq .bg_mskok
+            lslb
+            deca
+            bra .bg_msk
+.bg_mskok:  stb $13
+            lda mode
+            cmpa #$FF
+            beq .bg_set
+            ldx $12
+            lda #$FF
+            eora $13
+            anda ,x
+            sta ,x
+            bra .bg_next
+.bg_set:    ldx $12
+            lda ,x
+            ora $13
+            sta ,x
+.bg_next:   lda x0
+            cmpa x1
+            bne .bg_notend
+            lda y0
+            cmpa y1
+            beq .bg_end
+.bg_notend: lda $08
+            asla
+            sta $09
+            lda $09
+            cmpa #0
+            bpl .bg_skipx
+            lda $08
+            suba $05
+            sta $08
+            lda x0
+            adda $06
+            sta x0
+.bg_skipx:  lda $09
+            cmpa $04
+            bmi .bg_skipy
+            lda $08
+            adda $04
+            sta $08
+            lda y0
+            adda $07
+            sta y0
+.bg_skipy:  lbra .bg_loop
+.bg_end:    rts
 
-; =========================
-
-; --- Exemple d'appel ---
-;   LDY  #POINTS
-;   LDB  #4        ; 5 points = 4 segments (fermeture)
-;   LDA  #$FF      ; $FF: trace, $00: efface
-;   STA  MODE
-;   JSR  DrawPolyTable
-
-; =========================
-
-; Fin du fichier
