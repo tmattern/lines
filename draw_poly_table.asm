@@ -31,7 +31,7 @@ lv_yiter    rmb 1        ; itérateur Y
 
 ; Pour Bresenham (LineSelfModSetClear)
 bg_tmp      rmb 2        ; adresse pixel video
-bg_xbyte    rmb 1        ; octet colonne
+bg_addr     rmb 2    ; adresse octet vidéo courant (nouveau, 16 bits)
 bg_mask     rmb 1        ; masque bit
 bg_dx       rmb 1
 bg_dy       rmb 1
@@ -286,109 +286,118 @@ Line_HV_SetClear:
             jsr LineSelfModSetClear
             rts
 
-; === ROUTINE BRESENHAM GENERAL TRACE/EFFAC (mode) ===
 LineSelfModSetClear:
     lda x0
     cmpa x1
     bls .bg_dxpos
     lda x0
     suba x1
-    sta bg_dx
-    ldb #-1
-    stb bg_sx
-    bra .bg_dxok
-.bg_dxpos:
+
+; === Routine Bresenham 6809 (ligne tous cas) ===
+; Variables d'entrée : x0, y0, x1, y1, mode (FF=trace, sinon efface)
+; Variables temporaires : bg_dx, bg_dy, bg_sx, bg_sy, bg_err, bg_err2, bg_addr, bg_mask
+; Nécessite : bg_addr rmb 2, bg_mask rmb 1, bg_dx rmb 1, bg_dy rmb 1, bg_sx rmb 1, bg_sy rmb 1, bg_err rmb 1, bg_err2 rmb 1
+
+LineBresenham6809:
+    ; --- Calcul des directions et deltas ---
     lda x1
     suba x0
+    bpl dx_pos
+    nega
+    sta bg_dx
+    ldb #-1
+    stb bg_sx
+    bra dx_ok
+dx_pos
     sta bg_dx
     ldb #1
     stb bg_sx
-.bg_dxok:
-    lda y0
-    cmpa y1
-    bls .bg_dypos
-    lda y0
-    suba y1
+dx_ok
+    lda y1
+    suba y0
+    bpl dy_pos
+    nega
     sta bg_dy
     ldb #-1
     stb bg_sy
-    bra .bg_dyok
-.bg_dypos:
-    lda y1
-    suba y0
+    bra dy_ok
+dy_pos
     sta bg_dy
     ldb #1
     stb bg_sy
-.bg_dyok:
+dy_ok
+
     lda bg_dx
     suba bg_dy
     sta bg_err
-.bg_loop:
-    ; Calcul adresse vidéo complète dans bg_tmp (ligne) + x0//8
+
+;--- Boucle principale ---
+Bres_loop
+    ; --- Calcul adresse vidéo (adresse octet) ---
     lda y0
     ldb #40
-    mul
-    addd #$4000
-    std bg_tmp      ; bg_tmp = adresse début de ligne (16 bits)
+    mul                 ; D = y0 * 40
+    addd #$4000         ; D = base VRAM + offset ligne
+    std bg_addr         ; bg_addr = adresse début de ligne
+
     lda x0
     lsra
     lsra
-    lsra
+    lsra                ; x0 // 8
     clrb
-    addd bg_tmp     ; D = adresse octet vidéo du pixel courant
-    std bg_tmp      ; réutilise bg_tmp comme adresse vidéo complète
-    ; Calcul masque bit
+    addd bg_addr        ; D = adresse octet vidéo
+    std bg_addr
+
+    ; --- Calcul masque bit ---
     lda x0
     anda #7
     eora #7
     ldb #1
-.bg_msk:    cmpa #0
-    beq .bg_mskok
+masq_loop
+    cmpa #0
+    beq masq_ok
     lslb
     deca
-    bra .bg_msk
-.bg_mskok:  stb bg_mask
-    lda mode
-    cmpa #$FF
-    beq .bg_set
-    ldx bg_tmp      ; Adresse vidéo complète dans X
-    lda #$FF
-    eora bg_mask
-    anda ,x
-    sta ,x
-    bra .bg_next
-.bg_set:    ldx bg_tmp
+    bra masq_loop
+masq_ok
+    stb bg_mask
+
+    ; --- Trace ou efface ---
+    ldx bg_addr
     lda ,x
+    ldb mode
+    cmpb #$FF
+    bne efface
     ora bg_mask
+    bra store
+efface
+    coma        ; A = ~A
+    ora bg_mask
+    coma        ; A = ~A
+store
     sta ,x
-.bg_next:
-    ; ---- test de fin : APRES avoir tracé le pixel courant ----
+
+    ; --- Test de fin ---
     lda x0
     cmpa x1
-    bne .bg_continue
+    bne not_end
     lda y0
     cmpa y1
-    beq .bg_end
-.bg_continue:
-    ; ---- gestion Bresenham 6809 robuste (corrigé pour diagonale) ----
+    beq Bres_end
+not_end
+
+    ; --- Bresenham erreur 2*err ---
     lda bg_err
     asla
     sta bg_err2
 
-    lda bg_err2
-    cmpa #0
-    blt .bg_incrx
-    ; Si err2 >= 0, incrément y
-    lda bg_err
-    adda bg_dx
-    sta bg_err
-    lda y0
-    adda bg_sy
-    sta y0
-    bra .bg_chkx
+    ; Test incrément x (si 2*err > -dy)
+    ldb bg_err2
+    addb bg_dy    ; B = 2*err + dy
+    bpl do_x      ; Si positif, fait x
+    bra test_y
 
-.bg_incrx:
-    ; Si err2 < 0, incrément x
+do_x
     lda bg_err
     suba bg_dy
     sta bg_err
@@ -396,9 +405,18 @@ LineSelfModSetClear:
     adda bg_sx
     sta x0
 
-.bg_chkx:
-    lbra .bg_loop
+test_y
+    ldb bg_err2
+    subb bg_dx    ; B = 2*err - dx
+    bmi Bres_loop ; Si négatif, saute y
+    lda bg_err
+    adda bg_dx
+    sta bg_err
+    lda y0
+    adda bg_sy
+    sta y0
+    bra Bres_loop
 
-.bg_end:
+Bres_end
     rts
-    
+
