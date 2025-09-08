@@ -45,8 +45,8 @@ bg_err2     rmb 1
             lbra start
 
 ; --- TABLEAU DE POINTS EXEMPLE ---
-points      fcb 0,0
-            fcb 319,199
+points      fcb 30,30
+            fcb 100,100
             fcb 50,40
             fcb 10,40
             fcb 10,10
@@ -361,32 +361,44 @@ LineSelfModSetClear:
     lda ,x
     ora bg_mask
     sta ,x
-.bg_next:   lda x0
+.bg_next:
+    ; ---- test de fin : APRES avoir tracé le pixel courant ----
+    lda x0
     cmpa x1
-    bne .bg_notend
+    bne .bg_continue
     lda y0
     cmpa y1
     beq .bg_end
-.bg_notend: lda bg_err
+.bg_continue:
+    ; ---- gestion Bresenham 6809 robuste (corrigé pour diagonale) ----
+    lda bg_err
     asla
     sta bg_err2
+
     lda bg_err2
     cmpa #0
-    bpl .bg_skipx
-    lda bg_err
-    suba bg_dy
-    sta bg_err
-    lda x0
-    adda bg_sx
-    sta x0
-.bg_skipx:  lda bg_err2
-    cmpa bg_dx
-    bmi .bg_skipy
+    blt .bg_incrx
+    ; Si err2 >= 0, incrément y
     lda bg_err
     adda bg_dx
     sta bg_err
     lda y0
     adda bg_sy
     sta y0
-.bg_skipy:  lbra .bg_loop
-.bg_end:    rts
+    bra .bg_chkx
+
+.bg_incrx:
+    ; Si err2 < 0, incrément x
+    lda bg_err
+    suba bg_dy
+    sta bg_err
+    lda x0
+    adda bg_sx
+    sta x0
+
+.bg_chkx:
+    lbra .bg_loop
+
+.bg_end:
+    rts
+    
