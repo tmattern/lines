@@ -5,8 +5,7 @@
 ; mode = $FF (trace) ou $00 (efface)
 
 ; ==== SECTION RAM (page zéro) ====
-            org $A000
-            lbra start
+            org $FE00
 x0          rmb 1
 y0          rmb 1
 x1          rmb 1
@@ -15,22 +14,28 @@ mode        rmb 1
 tmp         rmb 2          ; pour STD/LDX tmp
 tmp2        rmb 2          ; pour une 2ème adresse, au besoin
 scratch     rmb 32         ; $10 à $2F pour variables temporaires
-
+count       rmb 1          ; compteur de points
 ; ==== SECTION DONNÉES Et CODE ====
+            org $A000
+            lbra start
 
 ; --- TABLEAU DE POINTS EXEMPLE ---
 points      fcb 10,10
-            fcb 50,10
+            fcb 190,10
             fcb 50,40
             fcb 10,40
             fcb 10,10
 
-npts        equ 5          ; 5 points = 4 segments + fermeture
+npts        equ 2          ; 5 points = 4 segments + fermeture
 
 
 ; --- Exemple d'appel dans ton programme principal ---
-start       ldy  #points
+start       LDA #$FE
+            TFR A,DP        ; DP = $FExx
+
+            ldy  #points
             ldb  #4        ; 5 points = 4 segments (fermeture)
+            stb  count
             lda  #$FF      ; $FF: trace, $00: efface
             sta  mode
             jsr  DrawPolyTable
@@ -54,7 +59,8 @@ DrawPolyTable_Loop:
             sta x0
             lda y1
             sta y0
-            decb
+            dec count
+            lda count
             bne DrawPolyTable_Loop
             rts
 
