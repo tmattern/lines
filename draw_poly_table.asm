@@ -5,7 +5,7 @@
 ; mode = $FF (trace) ou $00 (efface)
 
 ; ==== SECTION RAM (page zéro) ====
-            org $FE00
+            org $B000
 x0          rmb 1        ; point de départ X
 y0          rmb 1        ; point de départ Y
 x1          rmb 1        ; point d'arrivée X
@@ -45,8 +45,8 @@ bg_err2     rmb 1
             lbra start
 
 ; --- TABLEAU DE POINTS EXEMPLE ---
-points      fcb 10,10
-            fcb 190,10
+points      fcb 0,0
+            fcb 319,199
             fcb 50,40
             fcb 10,40
             fcb 10,10
@@ -54,7 +54,7 @@ points      fcb 10,10
 npts        equ 4          ; 5 points = 4 segments + fermeture
 
 ; --- Exemple d'appel ---
-start       LDA #$FE
+start       LDA #$B0
             TFR A,DP        ; DP = $FExx
             ldy  #points
             ldb  #npts
@@ -288,102 +288,105 @@ Line_HV_SetClear:
 
 ; === ROUTINE BRESENHAM GENERAL TRACE/EFFAC (mode) ===
 LineSelfModSetClear:
-            lda x0
-            cmpa x1
-            bls .bg_dxpos
-            lda x0
-            suba x1
-            sta bg_dx
-            ldb #-1
-            stb bg_sx
-            bra .bg_dxok
+    lda x0
+    cmpa x1
+    bls .bg_dxpos
+    lda x0
+    suba x1
+    sta bg_dx
+    ldb #-1
+    stb bg_sx
+    bra .bg_dxok
 .bg_dxpos:
-            lda x1
-            suba x0
-            sta bg_dx
-            ldb #1
-            stb bg_sx
+    lda x1
+    suba x0
+    sta bg_dx
+    ldb #1
+    stb bg_sx
 .bg_dxok:
-            lda y0
-            cmpa y1
-            bls .bg_dypos
-            lda y0
-            suba y1
-            sta bg_dy
-            ldb #-1
-            stb bg_sy
-            bra .bg_dyok
+    lda y0
+    cmpa y1
+    bls .bg_dypos
+    lda y0
+    suba y1
+    sta bg_dy
+    ldb #-1
+    stb bg_sy
+    bra .bg_dyok
 .bg_dypos:
-            lda y1
-            suba y0
-            sta bg_dy
-            ldb #1
-            stb bg_sy
+    lda y1
+    suba y0
+    sta bg_dy
+    ldb #1
+    stb bg_sy
 .bg_dyok:
-            lda bg_dx
-            suba bg_dy
-            sta bg_err
+    lda bg_dx
+    suba bg_dy
+    sta bg_err
 .bg_loop:
-            lda y0
-            ldb #40
-            mul
-            addd #$4000
-            std bg_tmp
-            lda x0
-            lsra
-            lsra
-            lsra
-            adda bg_tmp
-            sta bg_xbyte
-            lda x0
-            anda #7
-            eora #7
-            ldb #1
+    ; Calcul adresse vidéo complète dans bg_tmp (ligne) + x0//8
+    lda y0
+    ldb #40
+    mul
+    addd #$4000
+    std bg_tmp      ; bg_tmp = adresse début de ligne (16 bits)
+    lda x0
+    lsra
+    lsra
+    lsra
+    clrb
+    addd bg_tmp     ; D = adresse octet vidéo du pixel courant
+    std bg_tmp      ; réutilise bg_tmp comme adresse vidéo complète
+    ; Calcul masque bit
+    lda x0
+    anda #7
+    eora #7
+    ldb #1
 .bg_msk:    cmpa #0
-            beq .bg_mskok
-            lslb
-            deca
-            bra .bg_msk
+    beq .bg_mskok
+    lslb
+    deca
+    bra .bg_msk
 .bg_mskok:  stb bg_mask
-            lda mode
-            cmpa #$FF
-            beq .bg_set
-            ldx bg_xbyte
-            lda #$FF
-            eora bg_mask
-            anda ,x
-            sta ,x
-            bra .bg_next
-.bg_set:    ldx bg_xbyte
-            lda ,x
-            ora bg_mask
-            sta ,x
+    lda mode
+    cmpa #$FF
+    beq .bg_set
+    ldx bg_tmp      ; Adresse vidéo complète dans X
+    lda #$FF
+    eora bg_mask
+    anda ,x
+    sta ,x
+    bra .bg_next
+.bg_set:    ldx bg_tmp
+    lda ,x
+    ora bg_mask
+    sta ,x
 .bg_next:   lda x0
-            cmpa x1
-            bne .bg_notend
-            lda y0
-            cmpa y1
-            beq .bg_end
+    cmpa x1
+    bne .bg_notend
+    lda y0
+    cmpa y1
+    beq .bg_end
 .bg_notend: lda bg_err
-            asla
-            sta bg_err2
-            lda bg_err2
-            cmpa #0
-            bpl .bg_skipx
-            lda bg_err
-            suba bg_dy
-            sta bg_err
-            lda x0
-            adda bg_sx
-            sta x0
+    asla
+    sta bg_err2
+    lda bg_err2
+    cmpa #0
+    bpl .bg_skipx
+    lda bg_err
+    suba bg_dy
+    sta bg_err
+    lda x0
+    adda bg_sx
+    sta x0
 .bg_skipx:  lda bg_err2
-            cmpa bg_dx
-            bmi .bg_skipy
-            lda bg_err
-            adda bg_dx
-            sta bg_err
-            lda y0
-            adda bg_sy
-            sta y0
+    cmpa bg_dx
+    bmi .bg_skipy
+    lda bg_err
+    adda bg_dx
+    sta bg_err
+    lda y0
+    adda bg_sy
+    sta y0
 .bg_skipy:  lbra .bg_loop
 .bg_end:    rts
