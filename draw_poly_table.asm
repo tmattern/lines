@@ -6,15 +6,40 @@
 
 ; ==== SECTION RAM (page zéro) ====
             org $FE00
-x0          rmb 1
-y0          rmb 1
-x1          rmb 1
-y1          rmb 1
-mode        rmb 1
-tmp         rmb 2          ; pour STD/LDX tmp
-tmp2        rmb 2          ; pour une 2ème adresse, au besoin
-scratch     rmb 32         ; $10 à $2F pour variables temporaires
-count       rmb 1          ; compteur de points
+x0          rmb 1        ; point de départ X
+y0          rmb 1        ; point de départ Y
+x1          rmb 1        ; point d'arrivée X
+y1          rmb 1        ; point d'arrivée Y
+mode        rmb 1        ; $FF (trace), $00 (efface)
+count       rmb 1        ; compteur de segments
+
+; --- Variables temporaires, non partagées ---
+; Pour Line_HV_SetClear (horizontale)
+lh_tmp      rmb 2        ; adresse ligne video
+lh_byt0     rmb 1        ; octet video début
+lh_byt1     rmb 1        ; octet video fin
+lh_mask0    rmb 1        ; masque début
+lh_mask1    rmb 1        ; masque fin
+lh_filla    rmb 1        ; itérateur octet
+lh_fillz    rmb 1        ; borne octet
+
+; Pour Line_HV_SetClear (verticale)
+lv_tmp      rmb 2        ; adresse colonne video
+lv_mask     rmb 1        ; masque bit vertical
+lv_xbyte    rmb 1        ; octet colonne
+lv_yiter    rmb 1        ; itérateur Y
+
+; Pour Bresenham (LineSelfModSetClear)
+bg_tmp      rmb 2        ; adresse pixel video
+bg_xbyte    rmb 1        ; octet colonne
+bg_mask     rmb 1        ; masque bit
+bg_dx       rmb 1
+bg_dy       rmb 1
+bg_sx       rmb 1
+bg_sy       rmb 1
+bg_err      rmb 1
+bg_err2     rmb 1
+
 ; ==== SECTION DONNÉES Et CODE ====
             org $A000
             lbra start
@@ -26,24 +51,21 @@ points      fcb 10,10
             fcb 10,40
             fcb 10,10
 
-npts        equ 2          ; 5 points = 4 segments + fermeture
+npts        equ 4          ; 5 points = 4 segments + fermeture
 
-
-; --- Exemple d'appel dans ton programme principal ---
+; --- Exemple d'appel ---
 start       LDA #$FE
             TFR A,DP        ; DP = $FExx
-
             ldy  #points
-            ldb  #4        ; 5 points = 4 segments (fermeture)
+            ldb  #npts
             stb  count
             lda  #$FF      ; $FF: trace, $00: efface
             sta  mode
             jsr  DrawPolyTable
             rts
 
-
 ; --- ROUTINE PRINCIPALE: Trace ou efface le polygone ---
-; Entrées : Y = adresse du tableau, B = nombre de segments, mode = $FF/$00 en RAM
+; Entrées : Y = adresse du tableau, count = nombre de segments, mode = $FF/$00 en RAM
 DrawPolyTable:
             lda ,y+        ; x0
             sta x0
@@ -65,7 +87,6 @@ DrawPolyTable_Loop:
             rts
 
 ; === ROUTINE LIGNE ULTRA-RAPIDE TRACE/EFFACE ===
-; Entrée: x0,y0,x1,y1, mode
 Line_HV_SetClear:
             lda y0
             cmpa y1
@@ -83,18 +104,18 @@ Line_HV_SetClear:
             ldb #40
             mul
             addd #$4000
-            std tmp
+            std lh_tmp
 
             lda x0
             lsra
             lsra
             lsra
-            sta $12
+            sta lh_byt0
             lda x1
             lsra
             lsra
             lsra
-            sta $13
+            sta lh_byt1
 
             ; Masques début et fin
             lda x0
@@ -106,7 +127,7 @@ Line_HV_SetClear:
             lslb
             deca
             bra .lh_msk0
-.lh_msk0ok: stb $14
+.lh_msk0ok: stb lh_mask0
             lda x1
             anda #7
             eora #7
@@ -116,79 +137,80 @@ Line_HV_SetClear:
             lslb
             deca
             bra .lh_msk1
-.lh_msk1ok: stb $15
+.lh_msk1ok: stb lh_mask1
 
-            lda $12
-            cmpa $13
+            lda lh_byt0
+            cmpa lh_byt1
             beq .lh_samebyte
             ; Plusieurs octets
-            ldx tmp
+            ldx lh_tmp
             lda mode
             cmpa #$FF
             beq .lh_set
+
             ; ---- effacement ----
             lda #$FF
-            eora $14
-            anda $12,x
-            sta $12,x
+            eora lh_mask0
+            anda lh_byt0,x
+            sta lh_byt0,x
             lda #$FF
-            eora $15
-            anda $13,x
-            sta $13,x
+            eora lh_mask1
+            anda lh_byt1,x
+            sta lh_byt1,x
             ; Octets pleins
-            lda $12
+            lda lh_byt0
             inca
-            sta $16
-            lda $13
+            sta lh_filla
+            lda lh_byt1
             deca
-            sta $17
-.lh_fillc:  lda $16
-            cmpa $17
+            sta lh_fillz
+.lh_fillc:  lda lh_filla
+            cmpa lh_fillz
             bgt .lh_out
             lda #$00
             sta a,x
-            inc $16
+            inc lh_filla
             bra .lh_fillc
 .lh_out:    rts
 .lh_set:
-            lda $14
-            ora $12,x
-            sta $12,x
-            lda $15
-            ora $13,x
-            sta $13,x
+            lda lh_mask0
+            ora lh_byt0,x
+            sta lh_byt0,x
+            lda lh_mask1
+            ora lh_byt1,x
+            sta lh_byt1,x
             ; Octets pleins
-            lda $12
+            lda lh_byt0
             inca
-            sta $16
-            lda $13
+            sta lh_filla
+            lda lh_byt1
             deca
-            sta $17
-.lh_fills:  lda $16
-            cmpa $17
+            sta lh_fillz
+.lh_fills:  lda lh_filla
+            cmpa lh_fillz
             bgt .lh_out2
             lda #$FF
             sta a,x
-            inc $16
+            inc lh_filla
             bra .lh_fills
 .lh_out2:   rts
 .lh_samebyte:
-            ldx tmp
+            ldx lh_tmp
             lda mode
             cmpa #$FF
             beq .lh_sbset
             ; effacement
             lda #$FF
-            eora $14
-            eora $15
-            anda $12,x
-            sta $12,x
+            eora lh_mask0
+            eora lh_mask1
+            anda lh_byt0,x
+            sta lh_byt0,x
             rts
 .lh_sbset:
-            lda $14
-            ora $15
-            ora $12,x
-            sta $12,x
+            lda lh_mask0
+            ora lh_mask1
+            ora lh_byt0,x
+            sta lh_byt0,x
             rts
 
 ; ----- VERTICALE -----
@@ -208,7 +230,7 @@ Line_HV_SetClear:
             lsra
             lsra
             lsra
-            sta $18
+            sta lv_xbyte
             lda x0
             anda #7
             eora #7
@@ -218,45 +240,44 @@ Line_HV_SetClear:
             lslb
             deca
             bra .lv_mask
-.lv_maskok: stb $19
+.lv_maskok: stb lv_mask
             lda y0
-            sta $1A
+            sta lv_yiter
             lda mode
             cmpa #$FF
             beq .lv_set
             ; ---- effacement ----
-.lv_ce:     lda $1A
+.lv_ce:     lda lv_yiter
             cmpa y1
             bgt .lv_end
-            lda $1A
+            lda lv_yiter
             ldb #40
             mul
             addd #$4000
-            addb $18
-            std tmp
-            ldx tmp
+            addb lv_xbyte
+            std lv_tmp
+            ldx lv_tmp
             lda #$FF
-            eora $19
+            eora lv_mask
             anda ,x
             sta ,x
-            inc $1A
+            inc lv_yiter
             bra .lv_ce
-
 .lv_set:    ; ---- traçage ----
-.lv_cs:     lda $1A
+.lv_cs:     lda lv_yiter
             cmpa y1
             bgt .lv_end
-            lda $1A
+            lda lv_yiter
             ldb #40
             mul
             addd #$4000
-            addb $18
-            std tmp
-            ldx tmp
+            addb lv_xbyte
+            std lv_tmp
+            ldx lv_tmp
             lda ,x
-            ora $19
+            ora lv_mask
             sta ,x
-            inc $1A
+            inc lv_yiter
             bra .lv_cs
 .lv_end:    rts
 
@@ -272,48 +293,48 @@ LineSelfModSetClear:
             bls .bg_dxpos
             lda x0
             suba x1
-            sta $04
+            sta bg_dx
             ldb #-1
-            stb $06
+            stb bg_sx
             bra .bg_dxok
 .bg_dxpos:
             lda x1
             suba x0
-            sta $04
+            sta bg_dx
             ldb #1
-            stb $06
+            stb bg_sx
 .bg_dxok:
             lda y0
             cmpa y1
             bls .bg_dypos
             lda y0
             suba y1
-            sta $05
+            sta bg_dy
             ldb #-1
-            stb $07
+            stb bg_sy
             bra .bg_dyok
 .bg_dypos:
             lda y1
             suba y0
-            sta $05
+            sta bg_dy
             ldb #1
-            stb $07
+            stb bg_sy
 .bg_dyok:
-            lda $04
-            suba $05
-            sta $08
+            lda bg_dx
+            suba bg_dy
+            sta bg_err
 .bg_loop:
             lda y0
             ldb #40
             mul
             addd #$4000
-            std tmp
+            std bg_tmp
             lda x0
             lsra
             lsra
             lsra
-            adda tmp
-            sta $12
+            adda bg_tmp
+            sta bg_xbyte
             lda x0
             anda #7
             eora #7
@@ -323,19 +344,19 @@ LineSelfModSetClear:
             lslb
             deca
             bra .bg_msk
-.bg_mskok:  stb $13
+.bg_mskok:  stb bg_mask
             lda mode
             cmpa #$FF
             beq .bg_set
-            ldx $12
+            ldx bg_xbyte
             lda #$FF
-            eora $13
+            eora bg_mask
             anda ,x
             sta ,x
             bra .bg_next
-.bg_set:    ldx $12
+.bg_set:    ldx bg_xbyte
             lda ,x
-            ora $13
+            ora bg_mask
             sta ,x
 .bg_next:   lda x0
             cmpa x1
@@ -343,27 +364,26 @@ LineSelfModSetClear:
             lda y0
             cmpa y1
             beq .bg_end
-.bg_notend: lda $08
+.bg_notend: lda bg_err
             asla
-            sta $09
-            lda $09
+            sta bg_err2
+            lda bg_err2
             cmpa #0
             bpl .bg_skipx
-            lda $08
-            suba $05
-            sta $08
+            lda bg_err
+            suba bg_dy
+            sta bg_err
             lda x0
-            adda $06
+            adda bg_sx
             sta x0
-.bg_skipx:  lda $09
-            cmpa $04
+.bg_skipx:  lda bg_err2
+            cmpa bg_dx
             bmi .bg_skipy
-            lda $08
-            adda $04
-            sta $08
+            lda bg_err
+            adda bg_dx
+            sta bg_err
             lda y0
-            adda $07
+            adda bg_sy
             sta y0
 .bg_skipy:  lbra .bg_loop
 .bg_end:    rts
-
