@@ -1,17 +1,18 @@
-; Bresenham 16 bits, 6809, code à $A000, variables à $6100
-; Compatible lwasm, 320x200, VRAM $4000
-; Corrigé : gestion correcte du pas principal (axe dominant)
-; Utilise setdp $61
+; Bresenham 16 bits, 6809, VRAM $4000, 320x200, 1bpp
+; Compatible lwasm. Variables en $6100, code à $A000. setdp $61 obligatoire.
+;
+; Entrée :
+;   X0, Y0, X1, Y1 (16 bits, hi/lo, dans $6100-$6107)
+; Trace la ligne (X0,Y0)-(X1,Y1) en VRAM $4000
+; (change les valeurs ci-dessous pour tester d'autres lignes)
 
-; Constantes :
-X0VAL   equ     $0000       ; X0 = 0
-Y0VAL   equ     $0000       ; Y0 = 0
-X1VAL   equ     $013F       ; X1 = 319
-Y1VAL   equ     $00C7       ; Y1 = 199
+X0VAL   equ     $0000
+Y0VAL   equ     $0000
+X1VAL   equ     $013F    ; 319
+Y1VAL   equ     $00C7    ; 199
 
         org     $6100
-
-X0:     rmb     2           ; X0 (hi/lo)
+X0:     rmb     2
 Y0:     rmb     2
 X1:     rmb     2
 Y1:     rmb     2
@@ -26,9 +27,9 @@ TMP:    rmb     2
 BITMASK:rmb     1
 
         org     $A000
+VRAM_BASE equ   $4000
 
-VRAM_BASE   equ $4000
-
+; ====== EXEMPLE D'APPEL ======
 Start:
         setdp   $61
 
@@ -42,13 +43,10 @@ Start:
         std     Y1
 
         jsr     DrawLine
-
         rts
 
-; --- Routine de tracé de ligne Bresenham 16 bits ---
-; Entrée : X0,Y0,X1,Y1 initialisés
-; Sortie : trace la ligne en VRAM $4000
-
+; ====== ROUTINE BRESENHAM UNIVERSELLE ======
+; Entrée : X0,Y0,X1,Y1 en RAM
 DrawLine:
         ; X = X0
         ldd     X0
@@ -60,59 +58,136 @@ DrawLine:
         ; DX = abs(X1-X0)
         ldd     X1
         subd    X0
-        bpl     DXpos
+        bpl     DXP
         nega
         negb
         sbcb    #0
-DXpos:  std     DX
+DXP:    std     DX
 
-        ; SX = +1 ou -1 selon X1-X0
+        ; SX = (X1 > X0) ? 1 : -1
         ldd     X1
         subd    X0
-        bpl     SxPos
+        bpl     SXP
         lda     #-1
-        bra     SxSet
-SxPos:  lda     #1
-SxSet:  sta     SX
+        bra     SXS
+SXP:    lda     #1
+SXS:    sta     SX
 
-        ; DY = -abs(Y1-Y0) (on garde DY négatif pour l'algo)
-        ldd     Y0
-        subd    Y1
-        bpl     DYpos
+        ; DY = abs(Y1-Y0)
+        ldd     Y1
+        subd    Y0
+        bpl     DYP
         nega
         negb
         sbcb    #0
-DYpos:  std     DY
+DYP:    std     DY
 
-        ; SY = +1 ou -1 selon Y1-Y0
+        ; SY = (Y1 > Y0) ? 1 : -1
         ldd     Y1
         subd    Y0
-        bpl     SyPos
+        bpl     SYP
         lda     #-1
-        bra     SySet
-SyPos:  lda     #1
-SySet:  sta     SY
+        bra     SYS
+SYP:    lda     #1
+SYS:    sta     SY
 
-        ; ERR = DX + DY
+        ; On va déterminer si DX > DY (axe X dominant) ou l'inverse
         ldd     DX
-        addd    DY
+        cmpd    DY
+        bhs     XDOMINANT
+        ; --- Y dominant ---
+        ; ERR = DY/2
+        ldd     DY
+        lsra
+        rorb
+        std     ERR
+        bra     LoopY
+
+; --- Axe X dominant ---
+XDOMINANT:
+        ; ERR = DX/2
+        ldd     DX
+        lsra
+        rorb
         std     ERR
 
-Loop:
-        ; --- Plot pixel (X,Y) ---
-        lda     Y+1            ; Y lo
+LoopX:  ; boucle principale X dominant
+        jsr     PlotPixel
+
+        ldd     X
+        cmpd    X1
+        bne     NotEndX
+        ldd     Y
+        cmpd    Y1
+        beq     EndLine
+NotEndX:
+        ldd     ERR
+        subd    DY
+        std     ERR
+        bpl     NoIncY_X
+        ; Y += SY
+        lda     Y+1
+        adda    SY
+        sta     Y+1
+        ldd     ERR
+        addd    DX
+        std     ERR
+NoIncY_X:
+        ; X += SX
+        lda     X+1
+        adda    SX
+        sta     X+1
+        bra     LoopX
+
+; --- Axe Y dominant ---
+LoopY:
+        jsr     PlotPixel
+
+        ldd     X
+        cmpd    X1
+        bne     NotEndY
+        ldd     Y
+        cmpd    Y1
+        beq     EndLine
+NotEndY:
+        ldd     ERR
+        subd    DX
+        std     ERR
+        bpl     NoIncX_Y
+        ; X += SX
+        lda     X+1
+        adda    SX
+        sta     X+1
+        ldd     ERR
+        addd    DY
+        std     ERR
+NoIncX_Y:
+        ; Y += SY
+        lda     Y+1
+        adda    SY
+        sta     Y+1
+        bra     LoopY
+
+EndLine:
+        jsr     PlotPixel
+        rts
+
+; ====== PLOT PIXEL (X,Y) ======
+; Allume le pixel (X,Y) dans la VRAM $4000 (320x200, 1bpp)
+PlotPixel:
+        ; Adresse = VRAM_BASE + Y*40 + (X>>3)
+        lda     Y+1
         ldb     #40
         mul
         addd    #VRAM_BASE
         std     TMP
-
-        lda     X+1            ; X lo
+        lda     X+1
         lsra
         lsra
-        lsra                  ; X >> 3
+        lsra
         adda    TMP+1
         sta     TMP+1
-
+        ; Bitmask
         lda     X+1
         anda    #7
         eora    #7
@@ -126,55 +201,8 @@ BitMaskLoop:
         bne     BitMaskLoop
 BitMaskReady:
         stb     BITMASK
-
         ldx     TMP
         lda     ,x
         ora     BITMASK
         sta     ,x
-
-        ; Fin ? (X==X1 && Y==Y1)
-        ldd     X
-        cmpd    X1
-        bne     NotEnd
-        ldd     Y
-        cmpd    Y1
-        beq     EndLine
-NotEnd:
-
-        ; e2 = 2*ERR
-        ldd     ERR
-        addd    ERR
-
-        ; Si e2 >= DY (DY est négatif) alors avancer X
-        ldx     #DY
-        ldd     ERR
-        addd    ERR
-        cmpd    DY
-        blt     SkipX
-        ; ERR += DY
-        ldd     ERR
-        addd    DY
-        std     ERR
-        lda     X+1
-        adda    SX
-        sta     X+1
-SkipX:
-
-        ; Si e2 <= DX alors avancer Y
-        ldd     ERR
-        addd    ERR
-        cmpd    DX
-        bgt     SkipY
-        ; ERR += DX
-        ldd     ERR
-        addd    DX
-        std     ERR
-        lda     Y+1
-        adda    SY
-        sta     Y+1
-SkipY:
-
-        bra     Loop
-
-EndLine:
         rts
