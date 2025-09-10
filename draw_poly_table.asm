@@ -79,7 +79,8 @@ DrawLine:
     pshs    d,x,y,u
 
     ; 1. Calcul adresse début de ligne : VRAM_BASE + Y*40
-    ldb     Y0+1            ; B = Y (0..199)
+    ldd     Y0              ; B = Y (0..199)
+    tfr     d,y             ; y = Y0
     lda     #40
     mul                     ; D = Y * 40
     addd    #VRAM_BASE      ; D = adresse de début de la ligne
@@ -87,6 +88,7 @@ DrawLine:
 
     ; 2. Calcul de l'octet de colonne : (X/8) sur 16 bits
     ldd     X0              ; D = X (0..319)
+    tfr     d,u             ; u = X0
     lsra                    ; décalage 1 bit à droite
     rorb
     lsrb                    ; décalage 2
@@ -168,29 +170,32 @@ LoopX:
     ora     ,x
     sta     ,x
 
-    ldd     X0
-    cmpd    X1
-    beq     TestYEnd_X
+    cmpu    X1
+    beq     EndLine
 
     ldd     ERR
     subd    DY
     std     ERR
 
     bpl     NoIncY_X
+
+    addd    DX
+    std     ERR
+
     ; Y += SY (descendre ou monter d'une ligne)
     lda     SY
+    leay    a,y
     ldb     #LINE_BYTES
     mul                 ; D = SY * 40
     leax    d,x
 
-    ldd     ERR
-    addd    DX
-    std     ERR
 NoIncY_X:
 
+    leau    1,u
     ; MASK >> 1, si 0 alors MASK=$80 et x++
     lda     MASK
     lsra
+
     beq     NextByte_X
     sta     MASK
     bra     LoopX
@@ -200,26 +205,24 @@ NextByte_X:
     leax    1,x
     bra     LoopX
 
-TestYEnd_X:
-    ldd     Y0
-    cmpd    Y1
-    beq     EndLine
-    bra     LoopX
-
 ; ===== Boucle Y dominante =====
 LoopY:
     lda     MASK
     ora     ,x
     sta     ,x
 
-    ldd     Y0
-    cmpd    Y1
-    beq     TestXEnd_Y
+    cmpy    Y1
+    beq     EndLine
 
     ldd     ERR
     subd    DX
     std     ERR
     bpl     NoIncX_Y
+
+    addd    DY
+    std     ERR
+
+    leau    1,u
     ; MASK >> 1, si 0 alors MASK=$80 et x++
     lda     MASK
     lsra
@@ -230,20 +233,14 @@ NextByte_Y:
     lda     #$80
     sta     MASK
     leax    1,x
-    bra     IncY
+    
 NoIncX_Y:
-    ; Rien sur X
 IncY:
+    leay    1,y
     lda     SY
     ldb     #LINE_BYTES
     mul                 ; D = SY * 40
     leax    d,x
-    bra     LoopY
-
-TestXEnd_Y:
-    ldd     X0
-    cmpd    X1
-    beq     EndLine
     bra     LoopY
 
 EndLine:
