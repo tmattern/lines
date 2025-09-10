@@ -20,16 +20,18 @@ DY:     rmb     2
 SX:     rmb     1    ; 8 bits signé
 SY:     rmb     1
 ERR:    rmb     2
+MASK    rmb     1
+ADDR    rmb     2
 TMP:    rmb     2
 BITMASK:rmb     1
 LOOP_ID:rmb     1
 
 
 
+
 ; --- Boucle de tracé ---
 
         org     $A000
-VRAM_BASE equ   $4000
 
 Start:
         setdp   $61
@@ -63,165 +65,185 @@ LoopLines:
         rts
 
 
-; ===== Routine Bresenham universelle 16 bits, LEAX/LEAY =====
-DrawLine:
-        pshs    a,b
-        ; X = X0, Y = Y0
-        ldx     X0
-        ldy     Y0
+; Routine Bresenham optimisée pour 6809, 320x200, 1bpp, VRAM $4000
+; Entrées : X0, Y0, X1, Y1 (16 bits, page directe)
+; Variables temporaires : DX, DY, SX, SY, ERR (16 bits), MASK (8 bits)
+; Adresse VRAM de travail dans X
+; Utilise : A, B, X, Y, U
+VRAM_BASE equ   $4000
+LINE_BYTES  equ 40     ; 320/8 octets par ligne
 
-        ; DX = abs(X1-X0)
-        ldd     X1
-        subd    X0
-        bpl     DXP
-        coma
-        comb
-        addd    #1
+DrawLine:
+    pshs    d,x,y,u
+
+    ; -------- Calcul adresse VRAM du premier pixel --------
+    ldx     #VRAM_BASE
+    ldd     Y0          ; D = Y0
+    ldb     #LINE_BYTES
+    mul                  ; D = Y0 * 40
+    addd    X0          ; D = Y0*40 + X0
+
+    lsra           ; bit 0 de A (bit 8 de X) → Carry
+    rorb           ; bit 8 de X → bit 7 de B
+    lsrb           ; /2
+    lsrb           ; /4
+    ; B = (X / 8) (0..39 pour 320)
+    ; (A sera toujours 0 ici)
+
+    std     ADDR        ; offset octet dans VRAM
+    leax    d,x         ; X = adresse VRAM du pixel de départ
+
+    ; -------- Calcul masque du 1er pixel --------
+    ldb     X0+1        ; LSB de X0
+    andb    #$07
+    lda     #$80
+MaskLp:
+    tstb
+    beq     MaskDone
+    lsra
+    decb
+    bra     MaskLp
+MaskDone:
+    sta     MASK
+
+    ; -------- Initialisation Bresenham --------
+    ldd     X1
+    subd    X0
+    bpl     DXP
+    coma
+    comb
+    addd    #1
 DXP:    std     DX
 
-        ; SX = (X1 > X0) ? +1 : -1 (sur 8 bits)
-        ldd     X1
-        subd    X0
-        bpl     SXP
-        lda     #$FF
-        bra     SXS
+    ldd     X1
+    subd    X0
+    bpl     SXP
+    lda     #$FF
+    bra     SXS
 SXP:    lda     #$01
 SXS:    sta     SX
 
-        ; DY = abs(Y1-Y0)
-        ldd     Y1
-        subd    Y0
-        bpl     DYP
-        coma
-        comb
-        addd    #1
+    ldd     Y1
+    subd    Y0
+    bpl     DYP
+    coma
+    comb
+    addd    #1
 DYP:    std     DY
 
-        ; SY = (Y1 > Y0) ? +1 : -1 (sur 8 bits)
-        ldd     Y1
-        subd    Y0
-        bpl     SYP
-        lda     #$FF
-        bra     SYS
+    ldd     Y1
+    subd    Y0
+    bpl     SYP
+    lda     #$FF
+    bra     SYS
 SYP:    lda     #$01
 SYS:    sta     SY
 
-        ; Axe principal
-        ldd     DX
-        cmpd    DY
-        bhs     XDOMINANT
-        ; --- Y dominant ---
-        ldd     DY
-        lsra
-        rorb
-        std     ERR
-        bra     LoopY
+    ; -------- Axe principal --------
+    ldd     DX
+    cmpd    DY
+    bhs     XDOM
+    ; -- Y dominant --
+    ldd     DY
+    lsra
+    rorb
+    std     ERR
+    bra     LoopY
 
-; --- Axe X dominant ---
-XDOMINANT:
-        ldd     DX
-        lsra
-        rorb
-        std     ERR
+XDOM:
+    ldd     DX
+    lsra
+    rorb
+    std     ERR
 
-LoopX:  jsr     PlotPixelXY
+; ===== Boucle X dominante =====
+LoopX:
+    lda     MASK
+    ora     ,x
+    sta     ,x
 
-        ; Test fin
-        cmpx    X1
-        bne     NotEndX
-        cmpy    Y1
-        beq     EndLine
-NotEndX:
-        ldd     ERR
-        subd    DY
-        std     ERR
-        bpl     NoIncY_X
-        lda     SY
-        leay    a,y
-        ldd     ERR
-        addd    DX
-        std     ERR
+    ldd     X0
+    cmpd    X1
+    beq     TestYEnd_X
+
+    ldd     ERR
+    subd    DY
+    std     ERR
+
+    bpl     NoIncY_X
+    ; Y += SY (descendre ou monter d'une ligne)
+    lda     SY
+    ldb     #LINE_BYTES
+    mul                 ; D = SY * 40
+    leax    d,x
+
+    ldd     ERR
+    addd    DX
+    std     ERR
 NoIncY_X:
-        lda     SX
-        leax    a,x
-        bra     LoopX
 
-LoopY:  jsr     PlotPixelXY
+    ; MASK >> 1, si 0 alors MASK=$80 et x++
+    lda     MASK
+    lsra
+    beq     NextByte_X
+    sta     MASK
+    bra     LoopX
+NextByte_X:
+    lda     #$80
+    sta     MASK
+    leax    1,x
+    bra     LoopX
 
-        ; Test fin
-        cmpx    X1
-        bne     NotEndY
-        cmpy    Y1
-        beq     EndLine
-NotEndY:
-        ldd     ERR
-        subd    DX
-        std     ERR
-        bpl     NoIncX_Y
-        lda     SX
-        leax    a,x
-        ldd     ERR
-        addd    DY
-        std     ERR
+TestYEnd_X:
+    ldd     Y0
+    cmpd    Y1
+    beq     EndLine
+    bra     LoopX
+
+; ===== Boucle Y dominante =====
+LoopY:
+    lda     MASK
+    ora     ,x
+    sta     ,x
+
+    ldd     Y0
+    cmpd    Y1
+    beq     TestXEnd_Y
+
+    ldd     ERR
+    subd    DX
+    std     ERR
+    bpl     NoIncX_Y
+    ; MASK >> 1, si 0 alors MASK=$80 et x++
+    lda     MASK
+    lsra
+    beq     NextByte_Y
+    sta     MASK
+    bra     IncY
+NextByte_Y:
+    lda     #$80
+    sta     MASK
+    leax    1,x
+    bra     IncY
 NoIncX_Y:
-        lda     SY
-        leay    a,y
-        bra     LoopY
+    ; Rien sur X
+IncY:
+    lda     SY
+    ldb     #LINE_BYTES
+    mul                 ; D = SY * 40
+    leax    d,x
+    bra     LoopY
+
+TestXEnd_Y:
+    ldd     X0
+    cmpd    X1
+    beq     EndLine
+    bra     LoopY
 
 EndLine:
-        jsr     PlotPixelXY
+    puls    d,x,y,u,pc
 
-        ; retour
-        puls a,b,pc
 
-; ====== PLOT PIXEL (X,Y dans registres) ======
-; Routine PlotPixelXY pour 6809, écran 320x200 1bpp (VRAM $4000), X: 0..319, Y: 0..199
-; X = registre 16 bits (colonne), Y = registre 16 bits (ligne, seul l'octet bas utilisé)
-; Utilise TMP (2 octets) et BITMASK (1 octet) en direct page
-
-; Entrées : X = abscisse (0..319), Y = ordonnée (0..199)
-; Ecrase : D, TMP, BITMASK, X
-
-PlotPixelXY:
-        pshs    a,b,u
-        ; 1. Calcul adresse début de ligne : VRAM_BASE + Y*40
-        tfr     y,d             ; D = Y (0..199)
-        lda     #40
-        mul                     ; D = Y * 40
-        addd    #VRAM_BASE      ; D = adresse de début de la ligne
-        std     TMP             ; TMP = base de la ligne
-
-        ; 2. Calcul de l'octet de colonne : (X/8) sur 16 bits
-        tfr     x,d             ; D = X (0..319)
-        lsra                    ; décalage 1 bit à droite
-        rorb
-        lsrb                    ; décalage 2
-        lsrb                    ; décalage 3 => D = X / 8 (0..39)
-        addd    TMP             ; D = adresse exacte du pixel
-        std     TMP
-
-        ; 3. Construction du masque de bit pour le pixel
-        tfr     x,d             ; D = X
-        andb    #7              ; A = X MOD 8 (position du pixel dans octet)
-        eorb    #7              ; inversion pour bit haut à gauche
-        lda     #1
-BitMaskLoop:
-        cmpb    #0
-        beq     BitMaskReady
-        lsla
-        decb
-        bra     BitMaskLoop
-BitMaskReady:
-        sta     BITMASK         ; masque prêt
-
-        ; 4. Allumer le pixel
-        ldu     TMP             ; X = adresse octet dans VRAM
-        lda     ,u              ; lit l'octet
-        ora     BITMASK         ; ajoute le pixel
-        sta     ,u              ; écrit l'octet
-
-        ; retour
-        puls a,b,u,pc
 
 ; DATA
 LINES_COUNT  equ 200
