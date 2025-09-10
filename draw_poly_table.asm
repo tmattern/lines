@@ -57,6 +57,7 @@ LoopLines:
         leau    8,u
         ldb     LOOP_ID
         decb
+        stb     LOOP_ID
         bne     LoopLines
 
         rts
