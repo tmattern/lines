@@ -34,7 +34,7 @@ VRAM_BASE equ   $4000
 Start:
         setdp   $61
 
-        ldu     #LINEX
+        ldu     #LINES_TABLE
         ldb     #LINES_COUNT
         stb     LOOP_ID
 
@@ -263,7 +263,7 @@ LINES_TABLE:
         FDB 160,100,171,181
         FDB 160,100,167,182
         FDB 160,100,163,183
-LINEX   FDB 160,100,159,183
+        FDB 160,100,159,183
         FDB 160,100,155,184
         FDB 160,100,151,184
         FDB 160,100,147,184
