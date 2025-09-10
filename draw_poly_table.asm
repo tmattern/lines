@@ -34,7 +34,7 @@ VRAM_BASE equ   $4000
 Start:
         setdp   $61
 
-        ldu     #LINES_TABLE
+        ldu     #LINEX
         ldb     #LINES_COUNT
         stb     LOOP_ID
 
@@ -73,9 +73,9 @@ DrawLine:
         ldd     X1
         subd    X0
         bpl     DXP
-        nega
-        negb
-        sbcb    #0
+        coma
+        comb
+        addd    #1
 DXP:    std     DX
 
         ; SX = (X1 > X0) ? +1 : -1 (sur 8 bits)
@@ -91,9 +91,9 @@ SXS:    sta     SX
         ldd     Y1
         subd    Y0
         bpl     DYP
-        nega
-        negb
-        sbcb    #0
+        coma
+        comb
+        addd    #1
 DYP:    std     DY
 
         ; SY = (Y1 > Y0) ? +1 : -1 (sur 8 bits)
@@ -263,7 +263,7 @@ LINES_TABLE:
         FDB 160,100,171,181
         FDB 160,100,167,182
         FDB 160,100,163,183
-        FDB 160,100,159,183
+LINEX   FDB 160,100,159,183
         FDB 160,100,155,184
         FDB 160,100,151,184
         FDB 160,100,147,184
