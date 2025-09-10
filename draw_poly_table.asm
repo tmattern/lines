@@ -10,6 +10,8 @@ Y0VAL   equ $0000
 X1VAL   equ $013F    ; 319
 Y1VAL   equ $00C7    ; 199
 
+
+        setdp   $61
         org     $6100
 X0:     rmb     2
 Y0:     rmb     2
@@ -23,7 +25,6 @@ ERR:    rmb     2
 MASK    rmb     1
 ADDR    rmb     2
 TMP:    rmb     2
-BITMASK:rmb     1
 LOOP_ID:rmb     1
 
 
@@ -34,8 +35,9 @@ LOOP_ID:rmb     1
         org     $A000
 
 Start:
-        setdp   $61
-
+        lda     #$61
+        tfr     a,dp
+        
         ldu     #LINES_TABLE
         ldb     #LINES_COUNT
         stb     LOOP_ID
@@ -76,35 +78,36 @@ LINE_BYTES  equ 40     ; 320/8 octets par ligne
 DrawLine:
     pshs    d,x,y,u
 
-    ; -------- Calcul adresse VRAM du premier pixel --------
-    ldx     #VRAM_BASE
-    ldd     Y0          ; D = Y0
-    ldb     #LINE_BYTES
-    mul                  ; D = Y0 * 40
-    addd    X0          ; D = Y0*40 + X0
+    ; 1. Calcul adresse début de ligne : VRAM_BASE + Y*40
+    ldb     Y0+1            ; B = Y (0..199)
+    lda     #40
+    mul                     ; D = Y * 40
+    addd    #VRAM_BASE      ; D = adresse de début de la ligne
+    std     TMP             ; TMP = base de la ligne
 
-    lsra           ; bit 0 de A (bit 8 de X) → Carry
-    rorb           ; bit 8 de X → bit 7 de B
-    lsrb           ; /2
-    lsrb           ; /4
-    ; B = (X / 8) (0..39 pour 320)
-    ; (A sera toujours 0 ici)
+    ; 2. Calcul de l'octet de colonne : (X/8) sur 16 bits
+    ldd     X0              ; D = X (0..319)
+    lsra                    ; décalage 1 bit à droite
+    rorb
+    lsrb                    ; décalage 2
+    lsrb                    ; décalage 3 => D = X / 8 (0..39)
+    addd    TMP             ; D = adresse exacte du pixel
+    std     ADDR            ; TODO: variable inutile ?
+    ldx     ADDR
 
-    std     ADDR        ; offset octet dans VRAM
-    leax    d,x         ; X = adresse VRAM du pixel de départ
-
-    ; -------- Calcul masque du 1er pixel --------
-    ldb     X0+1        ; LSB de X0
-    andb    #$07
-    lda     #$80
-MaskLp:
-    tstb
-    beq     MaskDone
-    lsra
+    ; 3. Construction du masque de bit pour le pixel
+    ldd     X0              ; D = X
+    andb    #7              ; A = X MOD 8 (position du pixel dans octet)
+    eorb    #7              ; inversion pour bit haut à gauche
+    lda     #1
+BitMaskLoop:
+    cmpb    #0
+    beq     BitMaskReady
+    lsla
     decb
-    bra     MaskLp
-MaskDone:
-    sta     MASK
+    bra     BitMaskLoop
+BitMaskReady:
+    sta     MASK            ; masque prêt
 
     ; -------- Initialisation Bresenham --------
     ldd     X1
@@ -113,31 +116,34 @@ MaskDone:
     coma
     comb
     addd    #1
-DXP:    std     DX
-
+DXP:
+    std     DX
     ldd     X1
     subd    X0
     bpl     SXP
     lda     #$FF
     bra     SXS
-SXP:    lda     #$01
-SXS:    sta     SX
-
+SXP:
+    lda     #$01
+SXS:
+    sta     SX
     ldd     Y1
     subd    Y0
     bpl     DYP
     coma
     comb
     addd    #1
-DYP:    std     DY
-
+DYP:
+    std     DY
     ldd     Y1
     subd    Y0
     bpl     SYP
     lda     #$FF
     bra     SYS
-SYP:    lda     #$01
-SYS:    sta     SY
+SYP:
+    lda     #$01
+SYS:
+    sta     SY
 
     ; -------- Axe principal --------
     ldd     DX
