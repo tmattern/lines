@@ -187,7 +187,7 @@ Xd_Xm:
 ; --- routines DrawLine_xxx doivent suivre ---
 DrawLine_XpYp:
     lda     MASK
-Loop_XpYp:
+XpYp_Loop:
     ora     ,u
     sta     ,u
 
@@ -196,27 +196,27 @@ Loop_XpYp:
 
     ldd     ERR
     subd    DY
-    bpl     NoIncY_X
+    bpl     XpYp_NoIncY_X
     addd    DX
 
     ; Y += 1 (monter d'une ligne)
     leau    LINE_BYTES,u
 
-NoIncY_X:
+XpYp_NoIncY_X:
     std     ERR
 
     leax    1,x
     ; MASK >> 1, si 0 alors MASK=$80 et x++
     lda     MASK
     lsra
-    beq     NextByte_X
+    beq     XpYp_NextByte_X
     sta     MASK
-    bra     Loop_XpYp
-NextByte_X:
+    bra     XpYp_Loop
+XpYp_NextByte_X:
     lda     #$80
     sta     MASK
     leau    1,u
-    bra     Loop_XpYp
+    bra     XpYp_Loop
 
 DrawLine_XpYm:
     rts
