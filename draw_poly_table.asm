@@ -75,29 +75,64 @@ LoopLines:
 VRAM_BASE equ   $4000
 LINE_BYTES  equ 40     ; 320/8 octets par ligne
 
+
+; Entrée : X0, Y0, X1, Y1 (16 bits, direct page, big endian)
+; Variables : DX, DY (16 bits), SX, SY (8 bits)
+; Appelle la bonne routine de tracé par branchement relatif
+
 DrawLine:
     pshs    d,x,y,u
 
-    ; 1. Calcul adresse début de ligne : VRAM_BASE + Y*40
+    ; ---- Calcul DX = abs(X1 - X0), SX ----
+    ldd     X1          ; D = X1
+    subd    X0          ; D = X1 - X0 (signé)
+    std     DX
+    bpl     DX_Pos
+    coma
+    comb
+    addd    #1
+    std     DX
+    lda     #$FF        ; SX = -1
+    sta     SX
+    bra     DY_Calc
+DX_Pos:
+    lda     #1
+    sta     SX
+
+DY_Calc:
+    ; ---- Calcul DY = abs(Y1 - Y0), SY ----
+    ldd     Y1
+    subd    Y0
+    std     DY
+    bpl     DY_Pos
+    coma
+    comb
+    addd    #1
+    std     DY
+    lda     #$FF
+    sta     SY
+    bra     Dominant
+DY_Pos:
+    lda     #1
+    sta     SY
+
+; 1. Calcul adresse début de ligne : VRAM_BASE + Y*40
     ldd     Y0              ; B = Y (0..199)
-    tfr     d,y             ; y = Y0
     lda     #40
     mul                     ; D = Y * 40
     addd    #VRAM_BASE      ; D = adresse de début de la ligne
     std     TMP             ; TMP = base de la ligne
 
-    ; 2. Calcul de l'octet de colonne : (X/8) sur 16 bits
+; 2. Calcul de l'octet de colonne : (X/8) sur 16 bits
     ldd     X0              ; D = X (0..319)
-    tfr     d,u             ; u = X0
     lsra                    ; décalage 1 bit à droite
     rorb
     lsrb                    ; décalage 2
     lsrb                    ; décalage 3 => D = X / 8 (0..39)
     addd    TMP             ; D = adresse exacte du pixel
     std     ADDR            ; TODO: variable inutile ?
-    ldx     ADDR
 
-    ; 3. Construction du masque de bit pour le pixel
+; 3. Construction du masque de bit pour le pixel
     ldd     X0              ; D = X
     andb    #7              ; A = X MOD 8 (position du pixel dans octet)
     eorb    #7              ; inversion pour bit haut à gauche
@@ -111,148 +146,108 @@ BitMaskLoop:
 BitMaskReady:
     sta     MASK            ; masque prêt
 
-    ; -------- Initialisation Bresenham --------
-    ldd     X1
-    subd    X0
-    bpl     DXP
-    coma
-    comb
-    addd    #1
-DXP:
-    std     DX
-    ldd     X1
-    subd    X0
-    bpl     SXP
-    lda     #$FF
-    bra     SXS
-SXP:
-    lda     #$01
-SXS:
-    sta     SX
-    ldd     Y1
-    subd    Y0
-    bpl     DYP
-    coma
-    comb
-    addd    #1
-DYP:
-    std     DY
-    ldd     Y1
-    subd    Y0
-    bpl     SYP
-    lda     #$FF
-    bra     SYS
-SYP:
-    lda     #$01
-SYS:
-    sta     SY
+; ---- Registres DrawLine
+; x : X
+; y : Y
+; u : adresse VRAM
+    ldx     X0
+    ldy     Y0
+    ldu     ADDR
 
-    ; -------- Axe principal --------
+Dominant:
+; ---- Comparaison DX vs DY ----
     ldd     DX
     cmpd    DY
-    bhs     XDOM
-    ; -- Y dominant --
-    ldd     DY
-    lsra
-    rorb
-    std     ERR
-    bra     LoopY
+    bhs     X_Dom   ; DX >= DY → X dominant
 
-XDOM:
-    ldd     DX
-    lsra
-    rorb
-    std     ERR
+; ----- Y dominant -----
+Y_Dom:
+    ldb     SX
+    bmi     Yd_Xm
+    ldb     SY
+    bmi     DrawLine_YmXp    ; Y dominant, Y-, X+
+    bra     DrawLine_YpXp    ; Y dominant, Y+, X+
+Yd_Xm:
+    ldb     SY
+    bmi     DrawLine_YmXm    ; Y dominant, Y-, X-
+    bra     DrawLine_YpXm    ; Y dominant, Y+, X-
 
-; ===== Boucle X dominante =====
-LoopX:
+; ----- X dominant -----
+X_Dom:
+    ldb     SX
+    bmi     Xd_Xm
+    ldb     SY
+    bmi     DrawLine_XpYm    ; X+ dominant, Y-
+    bra     DrawLine_XpYp    ; X+ dominant, Y+
+Xd_Xm:
+    ldb     SY
+    bmi     DrawLine_XmYm    ; X- dominant, Y-
+    bra     DrawLine_XmYp    ; X- dominant, Y+
+
+; --- routines DrawLine_xxx doivent suivre ---
+DrawLine_XpYp:
     lda     MASK
-    ora     ,x
-    sta     ,x
+Loop_XpYp:
+    ora     ,u
+    sta     ,u
 
-    cmpu    X1
+    cmpx    X1
     beq     EndLine
 
     ldd     ERR
     subd    DY
-    std     ERR
-
     bpl     NoIncY_X
-
     addd    DX
-    std     ERR
 
-    ; Y += SY (descendre ou monter d'une ligne)
-    lda     SY
-    leay    a,y
-    ldb     #LINE_BYTES
-    mul                 ; D = SY * 40
-    leax    d,x
+    ; Y += 1 (monter d'une ligne)
+    leau    LINE_BYTES,u
 
 NoIncY_X:
+    std     ERR
 
-    leau    1,u
+    leax    1,x
     ; MASK >> 1, si 0 alors MASK=$80 et x++
     lda     MASK
     lsra
-
     beq     NextByte_X
     sta     MASK
-    bra     LoopX
+    bra     Loop_XpYp
 NextByte_X:
     lda     #$80
     sta     MASK
-    leax    1,x
-    bra     LoopX
-
-; ===== Boucle Y dominante =====
-LoopY:
-    lda     MASK
-    ora     ,x
-    sta     ,x
-
-    cmpy    Y1
-    beq     EndLine
-
-    ldd     ERR
-    subd    DX
-    std     ERR
-    bpl     NoIncX_Y
-
-    addd    DY
-    std     ERR
-
     leau    1,u
-    ; MASK >> 1, si 0 alors MASK=$80 et x++
-    lda     MASK
-    lsra
-    beq     NextByte_Y
-    sta     MASK
-    bra     IncY
-NextByte_Y:
-    lda     #$80
-    sta     MASK
-    leax    1,x
-    
-NoIncX_Y:
-IncY:
-    leay    1,y
-    lda     SY
-    ldb     #LINE_BYTES
-    mul                 ; D = SY * 40
-    leax    d,x
-    bra     LoopY
+    bra     Loop_XpYp
+
+DrawLine_XpYm:
+    rts
+
+DrawLine_XmYp:
+    rts
+
+DrawLine_XmYm:
+    rts
+
+DrawLine_YpXp:
+    rts
+
+DrawLine_YpXm:
+    rts
+
+DrawLine_YmXp:
+    rts
+
+DrawLine_YmXm:
+    rts
 
 EndLine:
     puls    d,x,y,u,pc
 
 
-
 ; DATA
-LINES_COUNT  equ 200
+LINES_COUNT  equ 1
 LINES_TABLE:
         ; Format : X0, Y0, X1, Y1 (16 bits big endian, 200 segments)
-        FDB 160,100,250,100
+        FDB 160,100,250,101
         FDB 160,100,249,103
         FDB 160,100,249,106
         FDB 160,100,249,108
