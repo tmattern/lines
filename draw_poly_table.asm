@@ -165,12 +165,12 @@ Y_Dom:
     ldb     SX
     bmi     Yd_Xm
     ldb     SY
-    bmi     DrawLine_YmXp    ; Y dominant, Y-, X+
-    bra     DrawLine_YpXp    ; Y dominant, Y+, X+
+    lbmi     DrawLine_YmXp    ; Y dominant, Y-, X+
+    lbra     DrawLine_YpXp    ; Y dominant, Y+, X+
 Yd_Xm:
     ldb     SY
-    bmi     DrawLine_YmXm    ; Y dominant, Y-, X-
-    bra     DrawLine_YpXm    ; Y dominant, Y+, X-
+    lbmi     DrawLine_YmXm    ; Y dominant, Y-, X-
+    lbra     DrawLine_YpXm    ; Y dominant, Y+, X-
 
 ; ----- X dominant -----
 X_Dom:
@@ -181,10 +181,10 @@ X_Dom:
     bra     DrawLine_XpYp    ; X+ dominant, Y+
 Xd_Xm:
     ldb     SY
-    bmi     DrawLine_XmYm    ; X- dominant, Y-
+    lbmi     DrawLine_XmYm    ; X- dominant, Y-
     bra     DrawLine_XmYp    ; X- dominant, Y+
 
-; --- routines DrawLine_xxx doivent suivre ---
+; --- Octant X+ Y+  ---
 DrawLine_XpYp:
     lda     MASK
 XpYp_Loop:
@@ -192,21 +192,17 @@ XpYp_Loop:
     sta     ,u
 
     cmpx    X1
-    beq     EndLine
+    beq    XpYp_EndLine
 
     ldd     ERR
     subd    DY
     bpl     XpYp_NoIncY_X
     addd    DX
-
-    ; Y += 1 (monter d'une ligne)
     leau    LINE_BYTES,u
-
 XpYp_NoIncY_X:
     std     ERR
 
     leax    1,x
-    ; MASK >> 1, si 0 alors MASK=$80 et x++
     lda     MASK
     lsra
     beq     XpYp_NextByte_X
@@ -217,34 +213,247 @@ XpYp_NextByte_X:
     sta     MASK
     leau    1,u
     bra     XpYp_Loop
+XpYp_EndLine:
+    puls    d,x,y,u,pc
 
+; --- Octant X+ Y- ---
 DrawLine_XpYm:
-    rts
+    lda     MASK
+XpYm_Loop:
+    ora     ,u
+    sta     ,u
 
+    cmpx    X1
+    beq     XpYm_EndLine
+
+    ldd     ERR
+    subd    DY
+    bpl     XpYm_NoDecY_X
+    addd    DX
+    leau    -LINE_BYTES,u
+XpYm_NoDecY_X:
+    std     ERR
+
+    leax    1,x
+    lda     MASK
+    lsra
+    beq     XpYm_NextByte_X
+    sta     MASK
+    bra     XpYm_Loop
+XpYm_NextByte_X:
+    lda     #$80
+    sta     MASK
+    leau    1,u
+    bra     XpYm_Loop
+XpYm_EndLine:
+    puls    d,x,y,u,pc
+
+
+; --- Octant X- Y+ ---
 DrawLine_XmYp:
-    rts
+    lda     MASK
+XmYp_Loop:
+    ora     ,u
+    sta     ,u
 
+    cmpx    X1
+    beq     XmYp_EndLine
+
+    ldd     ERR
+    subd    DY
+    bpl     XmYp_NoIncY_X
+    addd    DX
+    leau    LINE_BYTES,u
+XmYp_NoIncY_X:
+    std     ERR
+
+    leax    -1,x
+    lda     MASK
+    lsla
+    beq     XmYp_NextByte_X
+    sta     MASK
+    bra     XmYp_Loop
+XmYp_NextByte_X:
+    lda     #$01
+    sta     MASK
+    leau    -1,u
+    bra     XmYp_Loop
+XmYp_EndLine:
+    puls    d,x,y,u,pc
+
+; --- Octant X- Y- ---
 DrawLine_XmYm:
-    rts
+    lda     MASK
+XmYm_Loop:
+    ora     ,u
+    sta     ,u
 
+    cmpx    X1
+    beq     XmYm_EndLine
+
+    ldd     ERR
+    subd    DY
+    bpl     XmYm_NoDecY_X
+    addd    DX
+    leau    -LINE_BYTES,u
+XmYm_NoDecY_X:
+    std     ERR
+
+    leax    -1,x
+    lda     MASK
+    lsla
+    beq     XmYm_NextByte_X
+    sta     MASK
+    bra     XmYm_Loop
+XmYm_NextByte_X:
+    lda     #$01
+    sta     MASK
+    leau    -1,u
+    bra     XmYm_Loop
+XmYm_EndLine:
+    puls    d,x,y,u,pc
+
+; --- Octant Y+ X+ (Y dominant, X+) ---
 DrawLine_YpXp:
-    rts
+    lda     MASK
+YpXp_Loop:
+    ora     ,u
+    sta     ,u
 
+    cmpy    Y1
+    beq     YpXp_EndLine
+
+    ldd     ERR
+    subd    DX
+    bpl     YpXp_NoIncX_Y
+    addd    DY
+    std     ERR
+    leax    1,x
+    lda     MASK
+    lsra
+    beq     YpXp_NextByte_Y
+    sta     MASK
+    bra     YpXp_PostIncX
+YpXp_NextByte_Y:
+    lda     #$80
+    sta     MASK
+    leau    1,u
+    bra     YpXp_PostIncX
+YpXp_NoIncX_Y:
+    std     ERR
+    lda     MASK
+YpXp_PostIncX:
+    leay    1,y
+    leau    LINE_BYTES,u
+    bra     YpXp_Loop
+YpXp_EndLine:
+    puls    d,x,y,u,pc
+
+; --- Octant Y+ X- (Y dominant, X-) ---
 DrawLine_YpXm:
-    rts
+    lda     MASK
+YpXm_Loop:
+    ora     ,u
+    sta     ,u
 
+    cmpy    Y1
+    beq     YpXm_EndLine
+
+    ldd     ERR
+    subd    DX
+    bpl     YpXm_NoDecX_Y
+    addd    DY
+    leax    -1,x
+    lda     MASK
+    lsla
+    beq     YpXm_NextByte_Y
+    sta     MASK
+    bra     YpXm_PostDecX
+YpXm_NextByte_Y:
+    lda     #$01
+    sta     MASK
+    leau    -1,u
+YpXm_PostDecX:
+YpXm_NoDecX_Y:
+    std     ERR
+
+    leay    1,y
+    leau    LINE_BYTES,u
+    bra     YpXm_Loop
+YpXm_EndLine:
+    puls    d,x,y,u,pc
+
+; --- Octant Y- X+ (Y dominant, X+) ---
 DrawLine_YmXp:
-    rts
+    lda     MASK
+YmXp_Loop:
+    ora     ,u
+    sta     ,u
 
+    cmpy    Y1
+    beq     YmXp_EndLine
+
+    ldd     ERR
+    subd    DX
+    bpl     YmXp_NoIncX_Y
+    addd    DY
+    leax    1,x
+    lda     MASK
+    lsra
+    beq     YmXp_NextByte_Y
+    sta     MASK
+    bra     YmXp_PostIncX
+YmXp_NextByte_Y:
+    lda     #$80
+    sta     MASK
+    leau    1,u
+YmXp_PostIncX:
+YmXp_NoIncX_Y:
+    std     ERR
+
+    leay    -1,y
+    leau    -LINE_BYTES,u
+    bra     YmXp_Loop
+YmXp_EndLine:
+    puls    d,x,y,u,pc
+
+; --- Octant Y- X- (Y dominant, X-) ---
 DrawLine_YmXm:
-    rts
+    lda     MASK
+YmXm_Loop:
+    ora     ,u
+    sta     ,u
 
-EndLine:
+    cmpy    Y1
+    beq     YmXm_EndLine
+
+    ldd     ERR
+    subd    DX
+    bpl     YmXm_NoDecX_Y
+    addd    DY
+    leax    -1,x
+    lda     MASK
+    lsla
+    beq     YmXm_NextByte_Y
+    sta     MASK
+    bra     YmXm_PostDecX
+YmXm_NextByte_Y:
+    lda     #$01
+    sta     MASK
+    leau    -1,u
+YmXm_PostDecX:
+YmXm_NoDecX_Y:
+    std     ERR
+
+    leay    -1,y
+    leau    -LINE_BYTES,u
+    bra     YmXm_Loop
+YmXm_EndLine:
     puls    d,x,y,u,pc
 
 
 ; DATA
-LINES_COUNT  equ 1
+LINES_COUNT  equ 200
 LINES_TABLE:
         ; Format : X0, Y0, X1, Y1 (16 bits big endian, 200 segments)
         FDB 160,100,250,101
