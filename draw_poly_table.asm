@@ -116,6 +116,7 @@ DY_Pos:
     lda     #1
     sta     SY
 
+Dominant:
 ; 1. Calcul adresse début de ligne : VRAM_BASE + Y*40
     ldd     Y0              ; B = Y (0..199)
     lda     #40
@@ -154,7 +155,6 @@ BitMaskReady:
     ldy     Y0
     ldu     ADDR
 
-Dominant:
 ; ---- Comparaison DX vs DY ----
     ldd     DX
     cmpd    DY
@@ -165,12 +165,12 @@ Y_Dom:
     ldb     SX
     bmi     Yd_Xm
     ldb     SY
-    lbmi     DrawLine_YmXp    ; Y dominant, Y-, X+
-    lbra     DrawLine_YpXp    ; Y dominant, Y+, X+
+    lbmi    DrawLine_YmXp    ; Y dominant, Y-, X+
+    lbra    DrawLine_YpXp    ; Y dominant, Y+, X+
 Yd_Xm:
     ldb     SY
-    lbmi     DrawLine_YmXm    ; Y dominant, Y-, X-
-    lbra     DrawLine_YpXm    ; Y dominant, Y+, X-
+    lbmi    DrawLine_YmXm    ; Y dominant, Y-, X-
+    lbra    DrawLine_YpXm    ; Y dominant, Y+, X-
 
 ; ----- X dominant -----
 X_Dom:
@@ -181,7 +181,7 @@ X_Dom:
     bra     DrawLine_XpYp    ; X+ dominant, Y+
 Xd_Xm:
     ldb     SY
-    lbmi     DrawLine_XmYm    ; X- dominant, Y-
+    lbmi    DrawLine_XmYm    ; X- dominant, Y-
     bra     DrawLine_XmYp    ; X- dominant, Y+
 
 ; --- Octant X+ Y+  ---
@@ -363,6 +363,7 @@ YpXm_Loop:
     subd    DX
     bpl     YpXm_NoDecX_Y
     addd    DY
+    std     ERR
     leax    -1,x
     lda     MASK
     lsla
@@ -373,10 +374,11 @@ YpXm_NextByte_Y:
     lda     #$01
     sta     MASK
     leau    -1,u
-YpXm_PostDecX:
+    bra     YpXm_PostDecX
 YpXm_NoDecX_Y:
     std     ERR
-
+    lda     MASK
+YpXm_PostDecX:
     leay    1,y
     leau    LINE_BYTES,u
     bra     YpXm_Loop
@@ -397,6 +399,8 @@ YmXp_Loop:
     subd    DX
     bpl     YmXp_NoIncX_Y
     addd    DY
+    std     ERR
+
     leax    1,x
     lda     MASK
     lsra
@@ -407,10 +411,11 @@ YmXp_NextByte_Y:
     lda     #$80
     sta     MASK
     leau    1,u
-YmXp_PostIncX:
+    bra     YmXp_PostIncX
 YmXp_NoIncX_Y:
     std     ERR
-
+    lda     MASK
+YmXp_PostIncX:
     leay    -1,y
     leau    -LINE_BYTES,u
     bra     YmXp_Loop
@@ -431,6 +436,7 @@ YmXm_Loop:
     subd    DX
     bpl     YmXm_NoDecX_Y
     addd    DY
+    std     ERR
     leax    -1,x
     lda     MASK
     lsla
@@ -441,10 +447,11 @@ YmXm_NextByte_Y:
     lda     #$01
     sta     MASK
     leau    -1,u
-YmXm_PostDecX:
+    bra     YmXm_PostDecX
 YmXm_NoDecX_Y:
     std     ERR
-
+    lda     MASK
+YmXm_PostDecX:
     leay    -1,y
     leau    -LINE_BYTES,u
     bra     YmXm_Loop
@@ -536,7 +543,7 @@ LINES_TABLE:
         FDB 160,100,51,106
         FDB 160,100,51,103
         FDB 160,100,50,100
-        FDB 160,100,51,97
+TEST    FDB 160,100,51,97
         FDB 160,100,51,94
         FDB 160,100,51,91
         FDB 160,100,52,88
