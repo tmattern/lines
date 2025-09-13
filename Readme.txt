@@ -8,7 +8,22 @@
 
 ** V2
 200 lignes
-921012 cycles => 0,9s
+921012 cycles => 0,92s
 4605,06 cycle par ligne
 222 lignes/s
 
+** V3  (1 octant en 8 bits)
+200 lignes
+867583 cycles => 0,86s
+4338 cycle par ligne
+232 lignes/s
+
+1e ligne: 4134 cycles
+
+** V4  (optim X dominant)
+200 lignes
+861273 cycles => 0,86s
+4306 cycle par ligne
+232 lignes/s
+
+1e ligne: 3510 cycles
