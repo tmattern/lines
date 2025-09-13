@@ -212,9 +212,8 @@ XpYp_NoIncY_X_8:
     beq     XpYp_NextByte_X_8
     bra     XpYp_Loop_8
 XpYp_NextByte_X_8:
+    ror     MASK
     sta     ,u
-    lda     #$80
-    sta     MASK
     leau    1,u
     lda     ,u
     bra     XpYp_Loop_8
