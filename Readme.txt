@@ -28,7 +28,7 @@
 
 1e ligne: 3510 cycles
 
-** V3  (tous octants en 8 bits)
+** V5  (tous octants en 8 bits)
 200 lignes
 581574 cycles => 0,58s
 2908 cycles par ligne
