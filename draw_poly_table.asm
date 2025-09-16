@@ -169,24 +169,24 @@ Y_Dom:
     ldb     SX
     bmi     Yd_Xm
     ldb     SY
-    lbmi    DrawLine_YmXp    ; Y dominant, Y-, X+
-    lbra    DrawLine_YpXp    ; Y dominant, Y+, X+
+    lbmi    DrawLine_YmXp_8    ; Y dominant, Y-, X+
+    lbra    DrawLine_YpXp_8    ; Y dominant, Y+, X+
 Yd_Xm:
     ldb     SY
-    lbmi    DrawLine_YmXm    ; Y dominant, Y-, X-
-    lbra    DrawLine_YpXm    ; Y dominant, Y+, X-
+    lbmi    DrawLine_YmXm_8    ; Y dominant, Y-, X-
+    lbra    DrawLine_YpXm_8    ; Y dominant, Y+, X-
 
 ; ----- X dominant -----
 X_Dom:
     ldb     SX
     bmi     Xd_Xm
     ldb     SY
-    bmi     DrawLine_XpYm    ; X+ dominant, Y-
+    bmi     DrawLine_XpYm_8    ; X+ dominant, Y-
     bra     DrawLine_XpYp_8    ; X+ dominant, Y+
 Xd_Xm:
     ldb     SY
-    lbmi    DrawLine_XmYm    ; X- dominant, Y-
-    lbra    DrawLine_XmYp    ; X- dominant, Y+
+    lbmi    DrawLine_XmYm_8    ; X- dominant, Y-
+    lbra    DrawLine_XmYp_8    ; X- dominant, Y+
 
 ; --- Octant X+ Y+  ---
 DrawLine_XpYp_8:
@@ -221,278 +221,225 @@ XpYp_EndLine_8:
     sta     ,u
     puls    d,x,y,u,pc
 
-; --- Octant X+ Y+  ---
-DrawLine_XpYp:
+; --------- X+ Y+ (déjà présent) ---------
+; DrawLine_XpYp_8
+; (cf. ton code existant)
+
+; --------- X+ Y- ---------
+DrawLine_XpYm_8:
+    lda     DX+1
+    inca
+    sta     PIX_CPT
+    lda     ,u
+    ldb     ERR+1
+XpYm_Loop_8:
+    ora     MASK
+
+    dec     PIX_CPT
+    beq     XpYm_EndLine_8
+
+    subb    DY+1
+    bpl     XpYm_NoDecY_X_8
+    addb    DX+1
+    sta     ,u
+    leau    -LINE_BYTES,u
+    lda     ,u
+XpYm_NoDecY_X_8:
+    lsr     MASK
+    bne     XpYm_Loop_8
+
+    ror     MASK
+    sta     ,u
+    leau    1,u
+    lda     ,u
+    bra     XpYm_Loop_8
+XpYm_EndLine_8:
+    sta     ,u
+    puls    d,x,y,u,pc
+
+; --------- X- Y+ ---------
+DrawLine_XmYp_8:
+    lda     DX+1
+    inca
+    sta     PIX_CPT
+    lda     ,u
+    ldb     ERR+1
+XmYp_Loop_8:
+    ora     MASK
+
+    dec     PIX_CPT
+    beq     XmYp_EndLine_8
+
+    subb    DY+1
+    bpl     XmYp_NoIncY_X_8
+    addb    DX+1
+    sta     ,u
+    leau    LINE_BYTES,u
+    lda     ,u
+XmYp_NoIncY_X_8:
+    lsl     MASK
+    bne     XmYp_Loop_8
+
+    rol     MASK
+    sta     ,u
+    leau    -1,u
+    lda     ,u
+    bra     XmYp_Loop_8
+XmYp_EndLine_8:
+    sta     ,u
+    puls    d,x,y,u,pc
+
+
+; --------- X- Y- ---------
+DrawLine_XmYm_8:
+    lda     DX+1
+    inca
+    sta     PIX_CPT
+    lda     ,u
+    ldb     ERR+1
+XmYm_Loop_8:
+    ora     MASK
+
+    dec     PIX_CPT
+    beq     XmYm_EndLine_8
+
+    subb    DY+1
+    bpl     XmYm_NoDecY_X_8
+    addb    DX+1
+    sta     ,u
+    leau    -LINE_BYTES,u
+    lda     ,u
+XmYm_NoDecY_X_8:
+    lsl     MASK
+    bne     XmYm_Loop_8
+
+    rol     MASK
+    sta     ,u
+    leau    -1,u
+    lda     ,u
+    bra     XmYm_Loop_8
+XmYm_EndLine_8:
+    sta     ,u
+    puls    d,x,y,u,pc
+
+; --------- Y+ X+ ---------
+DrawLine_YpXp_8:
+    lda     DY+1
+    inca
+    sta     PIX_CPT
+    ldb     ERR+1
     lda     MASK
-XpYp_Loop:
+YpXp_Loop_8:
     ora     ,u
     sta     ,u
 
-    cmpx    X1
-    beq    XpYp_EndLine
+    dec     PIX_CPT
+    beq     YpXp_EndLine_8
 
-    ldd     ERR
-    subd    DY
-    bpl     XpYp_NoIncY_X
-    addd    DX
-    leau    LINE_BYTES,u
-XpYp_NoIncY_X:
-    std     ERR
-
-    leax    1,x
     lda     MASK
+    leau    LINE_BYTES,u
+    subb    DX+1
+    bpl     YpXp_Loop_8
+
+    addb    DY+1
     lsra
-    beq     XpYp_NextByte_X
     sta     MASK
-    bra     XpYp_Loop
-XpYp_NextByte_X:
+    bne     YpXp_Loop_8
     lda     #$80
     sta     MASK
     leau    1,u
-    bra     XpYp_Loop
-XpYp_EndLine:
+    bra     YpXp_Loop_8
+YpXp_EndLine_8:
     puls    d,x,y,u,pc
 
-; --- Octant X+ Y- ---
-DrawLine_XpYm:
+; --------- Y+ X- ---------
+DrawLine_YpXm_8:
+    lda     DY+1
+    inca
+    sta     PIX_CPT
+    ldb     ERR+1
     lda     MASK
-XpYm_Loop:
+YpXm_Loop_8:
     ora     ,u
     sta     ,u
 
-    cmpx    X1
-    beq     XpYm_EndLine
+    dec     PIX_CPT
+    beq     YpXm_EndLine_8
 
-    ldd     ERR
-    subd    DY
-    bpl     XpYm_NoDecY_X
-    addd    DX
-    leau    -LINE_BYTES,u
-XpYm_NoDecY_X:
-    std     ERR
-
-    leax    1,x
     lda     MASK
-    lsra
-    beq     XpYm_NextByte_X
+    leau    LINE_BYTES,u
+    subb    DX+1
+    bpl     YpXm_Loop_8
+
+    addb    DY+1
+    lsla
     sta     MASK
-    bra     XpYm_Loop
-XpYm_NextByte_X:
+    bne     YpXm_Loop_8
+    lda     #$01
+    sta     MASK
+    leau    -1,u
+    bra     YpXm_Loop_8
+YpXm_EndLine_8:
+    puls    d,x,y,u,pc
+
+; --------- Y- X+ ---------
+DrawLine_YmXp_8:
+    lda     DY+1
+    inca
+    sta     PIX_CPT
+    ldb     ERR+1
+    lda     MASK
+YmXp_Loop_8:
+    ora     ,u
+    sta     ,u
+
+    dec     PIX_CPT
+    beq     YmXp_EndLine_8
+
+    lda     MASK
+    leau    -LINE_BYTES,u
+    subb    DX+1
+    bpl     YmXp_Loop_8
+
+    addb    DY+1
+    lsra
+    sta     MASK
+    bne     YmXp_Loop_8
     lda     #$80
     sta     MASK
     leau    1,u
-    bra     XpYm_Loop
-XpYm_EndLine:
+    bra     YmXp_Loop_8
+YmXp_EndLine_8:
     puls    d,x,y,u,pc
 
-
-; --- Octant X- Y+ ---
-DrawLine_XmYp:
+; --------- Y- X- ---------
+DrawLine_YmXm_8:
+    lda     DY+1
+    inca
+    sta     PIX_CPT
+    ldb     ERR+1
     lda     MASK
-XmYp_Loop:
+YmXm_Loop_8:
     ora     ,u
     sta     ,u
 
-    cmpx    X1
-    beq     XmYp_EndLine
+    dec     PIX_CPT
+    beq     YmXm_EndLine_8
 
-    ldd     ERR
-    subd    DY
-    bpl     XmYp_NoIncY_X
-    addd    DX
-    leau    LINE_BYTES,u
-XmYp_NoIncY_X:
-    std     ERR
-
-    leax    -1,x
     lda     MASK
-    lsla
-    beq     XmYp_NextByte_X
-    sta     MASK
-    bra     XmYp_Loop
-XmYp_NextByte_X:
-    lda     #$01
-    sta     MASK
-    leau    -1,u
-    bra     XmYp_Loop
-XmYp_EndLine:
-    puls    d,x,y,u,pc
-
-; --- Octant X- Y- ---
-DrawLine_XmYm:
-    lda     MASK
-XmYm_Loop:
-    ora     ,u
-    sta     ,u
-
-    cmpx    X1
-    beq     XmYm_EndLine
-
-    ldd     ERR
-    subd    DY
-    bpl     XmYm_NoDecY_X
-    addd    DX
     leau    -LINE_BYTES,u
-XmYm_NoDecY_X:
-    std     ERR
+    subb    DX+1
+    bpl     YmXm_Loop_8
 
-    leax    -1,x
-    lda     MASK
+    addb    DY+1
     lsla
-    beq     XmYm_NextByte_X
     sta     MASK
-    bra     XmYm_Loop
-XmYm_NextByte_X:
+    bne     YmXm_Loop_8
     lda     #$01
     sta     MASK
     leau    -1,u
-    bra     XmYm_Loop
-XmYm_EndLine:
-    puls    d,x,y,u,pc
-
-; --- Octant Y+ X+ (Y dominant, X+) ---
-DrawLine_YpXp:
-    lda     MASK
-YpXp_Loop:
-    ora     ,u
-    sta     ,u
-
-    cmpy    Y1
-    beq     YpXp_EndLine
-
-    ldd     ERR
-    subd    DX
-    bpl     YpXp_NoIncX_Y
-    addd    DY
-    std     ERR
-    leax    1,x
-    lda     MASK
-    lsra
-    beq     YpXp_NextByte_Y
-    sta     MASK
-    bra     YpXp_PostIncX
-YpXp_NextByte_Y:
-    lda     #$80
-    sta     MASK
-    leau    1,u
-    bra     YpXp_PostIncX
-YpXp_NoIncX_Y:
-    std     ERR
-    lda     MASK
-YpXp_PostIncX:
-    leay    1,y
-    leau    LINE_BYTES,u
-    bra     YpXp_Loop
-YpXp_EndLine:
-    puls    d,x,y,u,pc
-
-; --- Octant Y+ X- (Y dominant, X-) ---
-DrawLine_YpXm:
-    lda     MASK
-YpXm_Loop:
-    ora     ,u
-    sta     ,u
-
-    cmpy    Y1
-    beq     YpXm_EndLine
-
-    ldd     ERR
-    subd    DX
-    bpl     YpXm_NoDecX_Y
-    addd    DY
-    std     ERR
-    leax    -1,x
-    lda     MASK
-    lsla
-    beq     YpXm_NextByte_Y
-    sta     MASK
-    bra     YpXm_PostDecX
-YpXm_NextByte_Y:
-    lda     #$01
-    sta     MASK
-    leau    -1,u
-    bra     YpXm_PostDecX
-YpXm_NoDecX_Y:
-    std     ERR
-    lda     MASK
-YpXm_PostDecX:
-    leay    1,y
-    leau    LINE_BYTES,u
-    bra     YpXm_Loop
-YpXm_EndLine:
-    puls    d,x,y,u,pc
-
-; --- Octant Y- X+ (Y dominant, X+) ---
-DrawLine_YmXp:
-    lda     MASK
-YmXp_Loop:
-    ora     ,u
-    sta     ,u
-
-    cmpy    Y1
-    beq     YmXp_EndLine
-
-    ldd     ERR
-    subd    DX
-    bpl     YmXp_NoIncX_Y
-    addd    DY
-    std     ERR
-
-    leax    1,x
-    lda     MASK
-    lsra
-    beq     YmXp_NextByte_Y
-    sta     MASK
-    bra     YmXp_PostIncX
-YmXp_NextByte_Y:
-    lda     #$80
-    sta     MASK
-    leau    1,u
-    bra     YmXp_PostIncX
-YmXp_NoIncX_Y:
-    std     ERR
-    lda     MASK
-YmXp_PostIncX:
-    leay    -1,y
-    leau    -LINE_BYTES,u
-    bra     YmXp_Loop
-YmXp_EndLine:
-    puls    d,x,y,u,pc
-
-; --- Octant Y- X- (Y dominant, X-) ---
-DrawLine_YmXm:
-    lda     MASK
-YmXm_Loop:
-    ora     ,u
-    sta     ,u
-
-    cmpy    Y1
-    beq     YmXm_EndLine
-
-    ldd     ERR
-    subd    DX
-    bpl     YmXm_NoDecX_Y
-    addd    DY
-    std     ERR
-    leax    -1,x
-    lda     MASK
-    lsla
-    beq     YmXm_NextByte_Y
-    sta     MASK
-    bra     YmXm_PostDecX
-YmXm_NextByte_Y:
-    lda     #$01
-    sta     MASK
-    leau    -1,u
-    bra     YmXm_PostDecX
-YmXm_NoDecX_Y:
-    std     ERR
-    lda     MASK
-YmXm_PostDecX:
-    leay    -1,y
-    leau    -LINE_BYTES,u
-    bra     YmXm_Loop
-YmXm_EndLine:
+    bra     YmXm_Loop_8
+YmXm_EndLine_8:
     puls    d,x,y,u,pc
 
 
