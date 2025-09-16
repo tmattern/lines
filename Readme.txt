@@ -34,3 +34,9 @@
 2908 cycles par ligne
 343 lignes/s
 
+** V6  (optim masque)
+200 lignes
+567880 cycles => 0,57s
+2839 cycles par ligne
+352 lignes/s
+

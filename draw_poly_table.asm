@@ -77,7 +77,6 @@ LINE_BYTES  equ 40     ; 320/8 octets par ligne
 ; Appelle la bonne routine de tracé par branchement relatif
 
 DrawLine:
-    STD     ,X++
     pshs    d,x,y,u
 
     ; ---- Calcul DX = abs(X1 - X0), SX, PIX_CPT, ERR ----
@@ -122,7 +121,7 @@ DY_Pos:
 
 Dominant:
 ; 1. Calcul adresse début de ligne : VRAM_BASE + Y*40
-    ldd     Y0              ; B = Y (0..199)
+    ldb     Y0+1            ; B = Y (0..199)
     lda     #40
     mul                     ; D = Y * 40
     addd    #VRAM_BASE      ; D = adresse de début de la ligne
@@ -138,17 +137,11 @@ Dominant:
     std     ADDR            ; TODO: variable inutile ?
 
 ; 3. Construction du masque de bit pour le pixel
-    ldd     X0              ; D = X
+    ldb     X0+1            ; D = X
     andb    #7              ; A = X MOD 8 (position du pixel dans octet)
-    eorb    #7              ; inversion pour bit haut à gauche
-    lda     #1
-BitMaskLoop:
-    cmpb    #0
-    beq     BitMaskReady
-    lsla
-    decb
-    bra     BitMaskLoop
-BitMaskReady:
+
+    ldx     #MASK_TABLE
+    lda     b,x
     sta     MASK            ; masque prêt
 
 ; ---- Registres DrawLine
@@ -444,6 +437,9 @@ YmXm_EndLine_8:
 
 
 ; DATA
+MASK_TABLE:
+        FCB 128,64,32,16,8,4,2,1
+
 LINES_COUNT  equ 200
 LINES_TABLE:
         ; Format : X0, Y0, X1, Y1 (16 bits big endian, 200 segments)
