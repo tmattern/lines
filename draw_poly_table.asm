@@ -1,12 +1,15 @@
+        include "lib/variables.asm"
+
         org     $A000
 
-        include "bresenham.asm"
 
 ; --- Boucle de tracé ---
 Start:
         lda     #$61
         tfr     a,dp
         
+        jsr     ClearScreen
+
         ldu     #LINES_TABLE
 
 LoopLines:
@@ -30,8 +33,11 @@ LoopLines:
         bra     LoopLines
 
 LoopEnd:
-        rts
+        bra     Start
 
+
+        include "lib/bresenham.asm"
+        include "lib/clear_screen.asm"
 
 
 LINES_TABLE:
