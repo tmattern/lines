@@ -5,53 +5,55 @@
 
 
 ClearScreen:
-    pshs  a,b,x,y,u,cc,dp
-    clrd
+    pshs  a,b,x,y,u,cc
+    orcc  #$50
+    sts   STACK
+    ldd   #0
     ldx   #0
     ldy   #0
-    tfr   a,dp
-    andcc #0
-    ldu   #$5F40
+    ldu   #0
+    lds   #$5F40
     
 CS_Loop:
     ; ligne 1
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
 
     ; ligne 2
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
 
     ; ligne 3
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
 
     ; ligne 4
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
 
     ; ligne 5
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
-    pshu  a,b,x,y,cc,dp
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
+    pshs  a,b,x,y,u
 
-    cmpu  #$4000
+    cmps  #$4000
     bne   CS_Loop
-    puls  a,b,x,y,u,cc,dp,pc
+    lds   STACK
+    puls  a,b,x,y,u,cc,pc
 
 
 ;==============================================================================
