@@ -227,254 +227,298 @@ DrawLine_XpYp_8:
     lda     ,u               ; A = contenu de l'octet VRAM courant
     ldb     ERR+1            ; B = variable d'erreur (octet bas)
 XpYp_Loop_8:
-    ora     MASK
+    ora     MASK             ; Allumer le pixel dans l'octet VRAM
 
-    dec     PIX_CPT
-    beq     XpYp_EndLine_8
+    dec     PIX_CPT          ; Décrémenter le compteur de pixels
+    beq     XpYp_EndLine_8   ; Si terminé, aller à la fin
 
-    subb    DY+1
-    bpl     XpYp_NoIncY_X_8
-    addb    DX+1
-    sta     ,u
-    leau    LINE_BYTES,u
-    lda     ,u
+    subb    DY+1             ; ERR -= DY (mise à jour erreur Bresenham)
+    bpl     XpYp_NoIncY_X_8  ; Si ERR >= 0, pas d'incrémentation Y
+    addb    DX+1             ; ERR += DX (correction erreur)
+    sta     ,u               ; Sauvegarder l'octet modifié en VRAM
+    leau    LINE_BYTES,u     ; U += 40 (ligne suivante)
+    lda     ,u               ; Charger le nouvel octet VRAM
 XpYp_NoIncY_X_8:
-    lsr     MASK
-    beq     XpYp_NextByte_X_8
-    bra     XpYp_Loop_8
+    lsr     MASK             ; Décaler le masque vers la droite (pixel suivant)
+    beq     XpYp_NextByte_X_8; Si masque = 0, passer à l'octet suivant
+    bra     XpYp_Loop_8      ; Continuer la boucle
 XpYp_NextByte_X_8:
-    ror     MASK
-    sta     ,u
-    leau    1,u
-    lda     ,u
-    bra     XpYp_Loop_8
+    ror     MASK             ; Restaurer le masque au bit 7 ($80)
+    sta     ,u               ; Sauvegarder l'octet courant
+    leau    1,u              ; U += 1 (octet suivant sur la même ligne)
+    lda     ,u               ; Charger le nouvel octet VRAM
+    bra     XpYp_Loop_8      ; Continuer la boucle
 XpYp_EndLine_8:
-    sta     ,u
-    puls    d,x,y,u,pc
+    sta     ,u               ; Sauvegarder le dernier octet modifié
+    puls    d,x,y,u,pc       ; Restaurer les registres et retourner
 
-; --------- X+ Y+ (déjà présent) ---------
-; DrawLine_XpYp_8
-; (cf. ton code existant)
+;==============================================================================
+; ROUTINE OCTANT X+ Y- (X DOMINANT)
+;==============================================================================
+; Tracé optimisé pour les lignes se dirigeant vers la droite et le haut
+; avec X dominant (pente entre 0 et -45 degrés)
 
-; --------- X+ Y- ---------
 DrawLine_XpYm_8:
-    lda     DX+1
-    inca
-    sta     PIX_CPT
-    lda     ,u
-    ldb     ERR+1
+    lda     DX+1             ; A = DX (octet bas, nombre de pixels à tracer)
+    inca                     ; A = DX + 1 (inclut le pixel de fin)
+    sta     PIX_CPT          ; PIX_CPT = compteur de pixels
+    lda     ,u               ; A = contenu de l'octet VRAM courant
+    ldb     ERR+1            ; B = variable d'erreur (octet bas)
 XpYm_Loop_8:
-    ora     MASK
+    ora     MASK             ; Allumer le pixel dans l'octet VRAM
 
-    dec     PIX_CPT
-    beq     XpYm_EndLine_8
+    dec     PIX_CPT          ; Décrémenter le compteur de pixels
+    beq     XpYm_EndLine_8   ; Si terminé, aller à la fin
 
-    subb    DY+1
-    bpl     XpYm_NoDecY_X_8
-    addb    DX+1
-    sta     ,u
-    leau    -LINE_BYTES,u
-    lda     ,u
+    subb    DY+1             ; ERR -= DY (mise à jour erreur Bresenham)
+    bpl     XpYm_NoDecY_X_8  ; Si ERR >= 0, pas de décrémentation Y
+    addb    DX+1             ; ERR += DX (correction erreur)
+    sta     ,u               ; Sauvegarder l'octet modifié en VRAM
+    leau    -LINE_BYTES,u    ; U -= 40 (ligne précédente, vers le haut)
+    lda     ,u               ; Charger le nouvel octet VRAM
 XpYm_NoDecY_X_8:
-    lsr     MASK
-    bne     XpYm_Loop_8
+    lsr     MASK             ; Décaler le masque vers la droite (pixel suivant)
+    bne     XpYm_Loop_8      ; Si masque != 0, continuer la boucle
 
-    ror     MASK
-    sta     ,u
-    leau    1,u
-    lda     ,u
-    bra     XpYm_Loop_8
+    ror     MASK             ; Restaurer le masque au bit 7 ($80)
+    sta     ,u               ; Sauvegarder l'octet courant
+    leau    1,u              ; U += 1 (octet suivant sur la même ligne)
+    lda     ,u               ; Charger le nouvel octet VRAM
+    bra     XpYm_Loop_8      ; Continuer la boucle
 XpYm_EndLine_8:
-    sta     ,u
-    puls    d,x,y,u,pc
+    sta     ,u               ; Sauvegarder le dernier octet modifié
+    puls    d,x,y,u,pc       ; Restaurer les registres et retourner
 
-; --------- X- Y+ ---------
+;==============================================================================
+; ROUTINE OCTANT X- Y+ (X DOMINANT)
+;==============================================================================
+; Tracé optimisé pour les lignes se dirigeant vers la gauche et le bas
+; avec X dominant (pente entre 180 et 135 degrés)
+
 DrawLine_XmYp_8:
-    lda     DX+1
-    inca
-    sta     PIX_CPT
-    lda     ,u
-    ldb     ERR+1
+    lda     DX+1             ; A = DX (octet bas, nombre de pixels à tracer)
+    inca                     ; A = DX + 1 (inclut le pixel de fin)
+    sta     PIX_CPT          ; PIX_CPT = compteur de pixels
+    lda     ,u               ; A = contenu de l'octet VRAM courant
+    ldb     ERR+1            ; B = variable d'erreur (octet bas)
 XmYp_Loop_8:
-    ora     MASK
+    ora     MASK             ; Allumer le pixel dans l'octet VRAM
 
-    dec     PIX_CPT
-    beq     XmYp_EndLine_8
+    dec     PIX_CPT          ; Décrémenter le compteur de pixels
+    beq     XmYp_EndLine_8   ; Si terminé, aller à la fin
 
-    subb    DY+1
-    bpl     XmYp_NoIncY_X_8
-    addb    DX+1
-    sta     ,u
-    leau    LINE_BYTES,u
-    lda     ,u
+    subb    DY+1             ; ERR -= DY (mise à jour erreur Bresenham)
+    bpl     XmYp_NoIncY_X_8  ; Si ERR >= 0, pas d'incrémentation Y
+    addb    DX+1             ; ERR += DX (correction erreur)
+    sta     ,u               ; Sauvegarder l'octet modifié en VRAM
+    leau    LINE_BYTES,u     ; U += 40 (ligne suivante, vers le bas)
+    lda     ,u               ; Charger le nouvel octet VRAM
 XmYp_NoIncY_X_8:
-    lsl     MASK
-    bne     XmYp_Loop_8
+    lsl     MASK             ; Décaler le masque vers la gauche (pixel précédent)
+    bne     XmYp_Loop_8      ; Si masque != 0, continuer la boucle
 
-    rol     MASK
-    sta     ,u
-    leau    -1,u
-    lda     ,u
-    bra     XmYp_Loop_8
+    rol     MASK             ; Restaurer le masque au bit 0 ($01)
+    sta     ,u               ; Sauvegarder l'octet courant
+    leau    -1,u             ; U -= 1 (octet précédent sur la même ligne)
+    lda     ,u               ; Charger le nouvel octet VRAM
+    bra     XmYp_Loop_8      ; Continuer la boucle
 XmYp_EndLine_8:
-    sta     ,u
-    puls    d,x,y,u,pc
+    sta     ,u               ; Sauvegarder le dernier octet modifié
+    puls    d,x,y,u,pc       ; Restaurer les registres et retourner
 
 
-; --------- X- Y- ---------
+;==============================================================================
+; ROUTINE OCTANT X- Y- (X DOMINANT)
+;==============================================================================
+; Tracé optimisé pour les lignes se dirigeant vers la gauche et le haut
+; avec X dominant (pente entre 180 et 225 degrés)
+
 DrawLine_XmYm_8:
-    lda     DX+1
-    inca
-    sta     PIX_CPT
-    lda     ,u
-    ldb     ERR+1
+    lda     DX+1             ; A = DX (octet bas, nombre de pixels à tracer)
+    inca                     ; A = DX + 1 (inclut le pixel de fin)
+    sta     PIX_CPT          ; PIX_CPT = compteur de pixels
+    lda     ,u               ; A = contenu de l'octet VRAM courant
+    ldb     ERR+1            ; B = variable d'erreur (octet bas)
 XmYm_Loop_8:
-    ora     MASK
+    ora     MASK             ; Allumer le pixel dans l'octet VRAM
 
-    dec     PIX_CPT
-    beq     XmYm_EndLine_8
+    dec     PIX_CPT          ; Décrémenter le compteur de pixels
+    beq     XmYm_EndLine_8   ; Si terminé, aller à la fin
 
-    subb    DY+1
-    bpl     XmYm_NoDecY_X_8
-    addb    DX+1
-    sta     ,u
-    leau    -LINE_BYTES,u
-    lda     ,u
+    subb    DY+1             ; ERR -= DY (mise à jour erreur Bresenham)
+    bpl     XmYm_NoDecY_X_8  ; Si ERR >= 0, pas de décrémentation Y
+    addb    DX+1             ; ERR += DX (correction erreur)
+    sta     ,u               ; Sauvegarder l'octet modifié en VRAM
+    leau    -LINE_BYTES,u    ; U -= 40 (ligne précédente, vers le haut)
+    lda     ,u               ; Charger le nouvel octet VRAM
 XmYm_NoDecY_X_8:
-    lsl     MASK
-    bne     XmYm_Loop_8
+    lsl     MASK             ; Décaler le masque vers la gauche (pixel précédent)
+    bne     XmYm_Loop_8      ; Si masque != 0, continuer la boucle
 
-    rol     MASK
-    sta     ,u
-    leau    -1,u
-    lda     ,u
-    bra     XmYm_Loop_8
+    rol     MASK             ; Restaurer le masque au bit 0 ($01)
+    sta     ,u               ; Sauvegarder l'octet courant
+    leau    -1,u             ; U -= 1 (octet précédent sur la même ligne)
+    lda     ,u               ; Charger le nouvel octet VRAM
+    bra     XmYm_Loop_8      ; Continuer la boucle
 XmYm_EndLine_8:
-    sta     ,u
-    puls    d,x,y,u,pc
+    sta     ,u               ; Sauvegarder le dernier octet modifié
+    puls    d,x,y,u,pc       ; Restaurer les registres et retourner
 
-; --------- Y+ X+ ---------
+;==============================================================================
+; ROUTINE OCTANT Y+ X+ (Y DOMINANT)
+;==============================================================================
+; Tracé optimisé pour les lignes se dirigeant vers la droite et le bas
+; avec Y dominant (pente entre 45 et 90 degrés)
+
 DrawLine_YpXp_8:
-    lda     DY+1
-    inca
-    sta     PIX_CPT
-    ldb     ERR+1
-    lda     MASK
+    lda     DY+1             ; A = DY (octet bas, nombre de pixels à tracer)
+    inca                     ; A = DY + 1 (inclut le pixel de fin)
+    sta     PIX_CPT          ; PIX_CPT = compteur de pixels
+    ldb     ERR+1            ; B = variable d'erreur (octet bas)
+    lda     MASK             ; A = masque de pixel courant
 YpXp_Loop_8:
-    ora     ,u
-    sta     ,u
+    ora     ,u               ; Allumer le pixel dans l'octet VRAM
+    sta     ,u               ; Sauvegarder l'octet modifié
 
-    dec     PIX_CPT
-    beq     YpXp_EndLine_8
+    dec     PIX_CPT          ; Décrémenter le compteur de pixels
+    beq     YpXp_EndLine_8   ; Si terminé, aller à la fin
 
-    lda     MASK
-    leau    LINE_BYTES,u
-    subb    DX+1
-    bpl     YpXp_Loop_8
+    lda     MASK             ; A = masque de pixel courant
+    leau    LINE_BYTES,u     ; U += 40 (ligne suivante, vers le bas)
+    subb    DX+1             ; ERR -= DX (mise à jour erreur Bresenham)
+    bpl     YpXp_Loop_8      ; Si ERR >= 0, pas d'incrémentation X
 
-    addb    DY+1
-    lsra
+    addb    DY+1             ; ERR += DY (correction erreur)
+    lsra                     ; Décaler le masque vers la droite (pixel suivant)
+    sta     MASK             ; Sauvegarder le nouveau masque
+    bne     YpXp_Loop_8      ; Si masque != 0, continuer la boucle
+    lda     #$80             ; Restaurer le masque au bit 7 ($80)
     sta     MASK
-    bne     YpXp_Loop_8
-    lda     #$80
-    sta     MASK
-    leau    1,u
-    bra     YpXp_Loop_8
+    leau    1,u              ; U += 1 (octet suivant sur la même ligne)
+    bra     YpXp_Loop_8      ; Continuer la boucle
 YpXp_EndLine_8:
-    puls    d,x,y,u,pc
+    puls    d,x,y,u,pc       ; Restaurer les registres et retourner
 
-; --------- Y+ X- ---------
+;==============================================================================
+; ROUTINE OCTANT Y+ X- (Y DOMINANT)
+;==============================================================================
+; Tracé optimisé pour les lignes se dirigeant vers la gauche et le bas
+; avec Y dominant (pente entre 90 et 135 degrés)
+
 DrawLine_YpXm_8:
-    lda     DY+1
-    inca
-    sta     PIX_CPT
-    ldb     ERR+1
-    lda     MASK
+    lda     DY+1             ; A = DY (octet bas, nombre de pixels à tracer)
+    inca                     ; A = DY + 1 (inclut le pixel de fin)
+    sta     PIX_CPT          ; PIX_CPT = compteur de pixels
+    ldb     ERR+1            ; B = variable d'erreur (octet bas)
+    lda     MASK             ; A = masque de pixel courant
 YpXm_Loop_8:
-    ora     ,u
-    sta     ,u
+    ora     ,u               ; Allumer le pixel dans l'octet VRAM
+    sta     ,u               ; Sauvegarder l'octet modifié
 
-    dec     PIX_CPT
-    beq     YpXm_EndLine_8
+    dec     PIX_CPT          ; Décrémenter le compteur de pixels
+    beq     YpXm_EndLine_8   ; Si terminé, aller à la fin
 
-    lda     MASK
-    leau    LINE_BYTES,u
-    subb    DX+1
-    bpl     YpXm_Loop_8
+    lda     MASK             ; A = masque de pixel courant
+    leau    LINE_BYTES,u     ; U += 40 (ligne suivante, vers le bas)
+    subb    DX+1             ; ERR -= DX (mise à jour erreur Bresenham)
+    bpl     YpXm_Loop_8      ; Si ERR >= 0, pas d'incrémentation X
 
-    addb    DY+1
-    lsla
+    addb    DY+1             ; ERR += DY (correction erreur)
+    lsla                     ; Décaler le masque vers la gauche (pixel précédent)
+    sta     MASK             ; Sauvegarder le nouveau masque
+    bne     YpXm_Loop_8      ; Si masque != 0, continuer la boucle
+    lda     #$01             ; Restaurer le masque au bit 0 ($01)
     sta     MASK
-    bne     YpXm_Loop_8
-    lda     #$01
-    sta     MASK
-    leau    -1,u
-    bra     YpXm_Loop_8
+    leau    -1,u             ; U -= 1 (octet précédent sur la même ligne)
+    bra     YpXm_Loop_8      ; Continuer la boucle
 YpXm_EndLine_8:
-    puls    d,x,y,u,pc
+    puls    d,x,y,u,pc       ; Restaurer les registres et retourner
 
-; --------- Y- X+ ---------
+;==============================================================================
+; ROUTINE OCTANT Y- X+ (Y DOMINANT)
+;==============================================================================
+; Tracé optimisé pour les lignes se dirigeant vers la droite et le haut
+; avec Y dominant (pente entre 315 et 360 degrés)
+
 DrawLine_YmXp_8:
-    lda     DY+1
-    inca
-    sta     PIX_CPT
-    ldb     ERR+1
-    lda     MASK
+    lda     DY+1             ; A = DY (octet bas, nombre de pixels à tracer)
+    inca                     ; A = DY + 1 (inclut le pixel de fin)
+    sta     PIX_CPT          ; PIX_CPT = compteur de pixels
+    ldb     ERR+1            ; B = variable d'erreur (octet bas)
+    lda     MASK             ; A = masque de pixel courant
 YmXp_Loop_8:
-    ora     ,u
-    sta     ,u
+    ora     ,u               ; Allumer le pixel dans l'octet VRAM
+    sta     ,u               ; Sauvegarder l'octet modifié
 
-    dec     PIX_CPT
-    beq     YmXp_EndLine_8
+    dec     PIX_CPT          ; Décrémenter le compteur de pixels
+    beq     YmXp_EndLine_8   ; Si terminé, aller à la fin
 
-    lda     MASK
-    leau    -LINE_BYTES,u
-    subb    DX+1
-    bpl     YmXp_Loop_8
+    lda     MASK             ; A = masque de pixel courant
+    leau    -LINE_BYTES,u    ; U -= 40 (ligne précédente, vers le haut)
+    subb    DX+1             ; ERR -= DX (mise à jour erreur Bresenham)
+    bpl     YmXp_Loop_8      ; Si ERR >= 0, pas d'incrémentation X
 
-    addb    DY+1
-    lsra
+    addb    DY+1             ; ERR += DY (correction erreur)
+    lsra                     ; Décaler le masque vers la droite (pixel suivant)
+    sta     MASK             ; Sauvegarder le nouveau masque
+    bne     YmXp_Loop_8      ; Si masque != 0, continuer la boucle
+    lda     #$80             ; Restaurer le masque au bit 7 ($80)
     sta     MASK
-    bne     YmXp_Loop_8
-    lda     #$80
-    sta     MASK
-    leau    1,u
-    bra     YmXp_Loop_8
+    leau    1,u              ; U += 1 (octet suivant sur la même ligne)
+    bra     YmXp_Loop_8      ; Continuer la boucle
 YmXp_EndLine_8:
-    puls    d,x,y,u,pc
+    puls    d,x,y,u,pc       ; Restaurer les registres et retourner
 
-; --------- Y- X- ---------
+;==============================================================================
+; ROUTINE OCTANT Y- X- (Y DOMINANT)
+;==============================================================================
+; Tracé optimisé pour les lignes se dirigeant vers la gauche et le haut
+; avec Y dominant (pente entre 225 et 270 degrés)
+
 DrawLine_YmXm_8:
-    lda     DY+1
-    inca
-    sta     PIX_CPT
-    ldb     ERR+1
-    lda     MASK
+    lda     DY+1             ; A = DY (octet bas, nombre de pixels à tracer)
+    inca                     ; A = DY + 1 (inclut le pixel de fin)
+    sta     PIX_CPT          ; PIX_CPT = compteur de pixels
+    ldb     ERR+1            ; B = variable d'erreur (octet bas)
+    lda     MASK             ; A = masque de pixel courant
 YmXm_Loop_8:
-    ora     ,u
-    sta     ,u
+    ora     ,u               ; Allumer le pixel dans l'octet VRAM
+    sta     ,u               ; Sauvegarder l'octet modifié
 
-    dec     PIX_CPT
-    beq     YmXm_EndLine_8
+    dec     PIX_CPT          ; Décrémenter le compteur de pixels
+    beq     YmXm_EndLine_8   ; Si terminé, aller à la fin
 
-    lda     MASK
-    leau    -LINE_BYTES,u
-    subb    DX+1
-    bpl     YmXm_Loop_8
+    lda     MASK             ; A = masque de pixel courant
+    leau    -LINE_BYTES,u    ; U -= 40 (ligne précédente, vers le haut)
+    subb    DX+1             ; ERR -= DX (mise à jour erreur Bresenham)
+    bpl     YmXm_Loop_8      ; Si ERR >= 0, pas d'incrémentation X
 
-    addb    DY+1
-    lsla
+    addb    DY+1             ; ERR += DY (correction erreur)
+    lsla                     ; Décaler le masque vers la gauche (pixel précédent)
+    sta     MASK             ; Sauvegarder le nouveau masque
+    bne     YmXm_Loop_8      ; Si masque != 0, continuer la boucle
+    lda     #$01             ; Restaurer le masque au bit 0 ($01)
     sta     MASK
-    bne     YmXm_Loop_8
-    lda     #$01
-    sta     MASK
-    leau    -1,u
-    bra     YmXm_Loop_8
+    leau    -1,u             ; U -= 1 (octet précédent sur la même ligne)
+    bra     YmXm_Loop_8      ; Continuer la boucle
 YmXm_EndLine_8:
-    puls    d,x,y,u,pc
+    puls    d,x,y,u,pc       ; Restaurer les registres et retourner
 
 
-; DATA
+;==============================================================================
+; DONNÉES ET TABLES
+;==============================================================================
+
+;------------------------------------------------------------------------------
+; TABLE DES MASQUES DE PIXELS
+;------------------------------------------------------------------------------
+; Table de conversion position → masque de bit pour l'affichage des pixels
+; Index 0..7 correspond à la position du pixel dans l'octet (de gauche à droite)
+; Valeurs : 128,64,32,16,8,4,2,1 (bits 7,6,5,4,3,2,1,0)
+
 MASK_TABLE:
-        FCB 128,64,32,16,8,4,2,1
+        FCB 128,64,32,16,8,4,2,1    ; Masques de bits pour positions 0 à 7
 
+;==============================================================================
+; FIN DU FICHIER BRESENHAM.ASM
+;==============================================================================
