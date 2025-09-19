@@ -3,9 +3,10 @@
 ; Utilise : X, A uniquement
 ;==============================================================================
 
-ClearScreen:
+ClearScreen_v1:
+    pshs  a,x,u
     ldx   #$4000         ; Début VRAM
-    clru                 ; U = 0 (valeur à écrire)
+    ldu   #0             ; U = 0 (valeur à écrire)
     lda   #200           ; A = 200 lignes
 CS_Loop:
     stu   0,x
@@ -30,7 +31,57 @@ CS_Loop:
     stu   38,x
     deca
     bne   CS_Loop
-    rts
+    puls  a,x,u,pc
+
+ClearScreen_v2:
+    pshs  a,b,x,y,u,cc,dp
+    clrd
+    ldx   #0
+    ldy   #0
+    tfr   a,dp
+    andcc #0
+    ldu   #$5F40
+    
+CS_Loop_v2:
+    ; ligne 1
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+
+    ; ligne 2
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+
+    ; ligne 3
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+
+    ; ligne 4
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+
+    ; ligne 5
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+    pshu  a,b,x,y,cc,dp
+
+    cmpu  #$4000
+    bne   CS_Loop_v2
+    puls  a,b,x,y,u,cc,dp,pc
+
 
 ;==============================================================================
 ; Effacement d'une zone centrée de 192x120 pixels (24 octets x 120 lignes)
