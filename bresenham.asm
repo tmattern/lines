@@ -1,4 +1,25 @@
 ;==============================================================================
+; bresenham.asm - Algorithme de tracé de ligne optimisé (Bresenham) pour 6809
+;
+; Copyright (C) 2025 Thibaut Mattern
+;
+; Ce programme est un logiciel libre : vous pouvez le redistribuer et/ou
+; le modifier selon les termes de la Licence Publique Générale GNU publiée par
+; la Free Software Foundation, soit la version 3 de la licence, soit (à votre
+; choix) toute version ultérieure.
+;
+; Ce programme est distribué dans l’espoir qu’il sera utile, mais SANS AUCUNE
+; GARANTIE ; sans même la garantie implicite de QUALITÉ MARCHANDE ou
+; d’ADÉQUATION À UN BUT PARTICULIER. Voir la Licence Publique Générale GNU
+; pour plus de détails.
+;
+; Vous devriez avoir reçu une copie de la Licence Publique Générale GNU
+; avec ce programme ; si ce n’est pas le cas, voir <https://www.gnu.org/licenses/>.
+;
+; Auteur : Thibaut Mattern <tmattern@users.noreply.github.com>
+;==============================================================================
+
+;==============================================================================
 ; ALGORITHME DE BRESENHAM OPTIMISÉ POUR MOTOROLA 6809
 ;==============================================================================
 ; 
