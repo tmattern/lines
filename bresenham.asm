@@ -1,31 +1,66 @@
-; Bresenham universel 16 bits, 6809
-; X et Y courants dans registres X et Y (16 bits)
-; Incrémentation avec LEAX A,X et LEAY A,Y (A signé)
-; SX et SY en direct page (8 bits signés)
-; VRAM $4000, 320x200 (1bpp)
-; Compatible lwasm, setdp $61
+;==============================================================================
+; ALGORITHME DE BRESENHAM OPTIMISÉ POUR MOTOROLA 6809
+;==============================================================================
+; 
+; Description :
+;   Implémentation optimisée de l'algorithme de Bresenham pour le tracé de 
+;   lignes droites sur écran graphique 320x200 pixels en mode 1 bit par pixel.
+;   
+; Spécifications techniques :
+;   - Processeur     : Motorola 6809
+;   - Résolution     : 320x200 pixels
+;   - Profondeur     : 1 bit par pixel (monochrome)
+;   - Mémoire vidéo  : $4000-$5F3F (8000 octets)
+;   - Page directe   : $61xx
+;   - Assembleur     : lwasm compatible
+;
+; Convention d'appel :
+;   Entrées  : X0, Y0, X1, Y1 (coordonnées 16 bits en page directe)
+;   Sorties  : Ligne tracée en mémoire vidéo
+;   Registres utilisés : A, B, X, Y, U (sauvegardés/restaurés)
+;   Variables temporaires : DX, DY, SX, SY, ERR, MASK, ADDR, TMP, PIX_CPT
+;
+; Optimisations :
+;   - 8 routines spécialisées par octant pour éviter les tests dans la boucle
+;   - Calculs en 8 bits quand possible pour accélérer les opérations
+;   - Gestion optimisée des masques de bits pour l'affichage pixel
+;   - Adressage VRAM pré-calculé pour minimiser les calculs en boucle
+;
+;==============================================================================
 
-X0VAL   equ $0000
-Y0VAL   equ $0000
-X1VAL   equ $013F    ; 319
-Y1VAL   equ $00C7    ; 199
+;------------------------------------------------------------------------------
+; VALEURS DE TEST ET CONSTANTES
+;------------------------------------------------------------------------------
+X0VAL   equ $0000        ; Coordonnée X de début pour les tests
+Y0VAL   equ $0000        ; Coordonnée Y de début pour les tests  
+X1VAL   equ $013F        ; Coordonnée X de fin pour les tests (319)
+Y1VAL   equ $00C7        ; Coordonnée Y de fin pour les tests (199)
 
 
-        setdp   $61
-        org     $6100
-X0:     rmb     2
-Y0:     rmb     2
-X1:     rmb     2
-Y1:     rmb     2
-DX:     rmb     2
-DY:     rmb     2
-SX:     rmb     1    ; 8 bits signé
-SY:     rmb     1
-ERR:    rmb     2
-MASK    rmb     1
-ADDR    rmb     2
-TMP:    rmb     2
-PIX_CPT:rmb     1
+;------------------------------------------------------------------------------
+; INITIALISATION ET VARIABLES EN PAGE DIRECTE
+;------------------------------------------------------------------------------
+        setdp   $61      ; Configuration page directe à $61xx
+        org     $6100    ; Adresse de début des variables
+
+; Variables d'entrée (coordonnées des points)
+X0:     rmb     2        ; Coordonnée X du point de départ (16 bits big-endian)
+Y0:     rmb     2        ; Coordonnée Y du point de départ (16 bits big-endian)  
+X1:     rmb     2        ; Coordonnée X du point d'arrivée (16 bits big-endian)
+Y1:     rmb     2        ; Coordonnée Y du point d'arrivée (16 bits big-endian)
+
+; Variables de calcul Bresenham
+DX:     rmb     2        ; Différence absolue |X1-X0| (16 bits)
+DY:     rmb     2        ; Différence absolue |Y1-Y0| (16 bits)
+SX:     rmb     1        ; Sens d'incrémentation X : +1 ou -1 (8 bits signé)
+SY:     rmb     1        ; Sens d'incrémentation Y : +1 ou -1 (8 bits signé)
+ERR:    rmb     2        ; Variable d'erreur Bresenham (16 bits)
+
+; Variables de gestion pixel et adressage VRAM
+MASK:   rmb     1        ; Masque de bit pour le pixel courant (8 bits : 128,64,32,16,8,4,2,1)
+ADDR:   rmb     2        ; Adresse VRAM de l'octet contenant le pixel courant (16 bits)
+TMP:    rmb     2        ; Variable temporaire pour calculs d'adresse (16 bits)
+PIX_CPT:rmb     1        ; Compteur de pixels à tracer (8 bits)
 
 
 
@@ -34,126 +69,163 @@ PIX_CPT:rmb     1
 ; Variables temporaires : DX, DY, SX, SY, ERR (16 bits), MASK (8 bits)
 ; Adresse VRAM de travail dans X
 ; Utilise : A, B, X, Y, U
-VRAM_BASE equ   $4000
-LINE_BYTES  equ 40     ; 320/8 octets par ligne
+VRAM_BASE   equ $4000    ; Adresse de base de la mémoire vidéo
+LINE_BYTES  equ 40       ; Nombre d'octets par ligne (320 pixels ÷ 8 bits/octet)
 
 
 ; Entrée : X0, Y0, X1, Y1 (16 bits, direct page, big endian)
 ; Variables : DX, DY (16 bits), SX, SY (8 bits)
 ; Appelle la bonne routine de tracé par branchement relatif
 
-DrawLine:
-    pshs    d,x,y,u
+; PHASE 1 : CALCUL DE DX, SX ET INITIALISATION D'ERR
+;------------------------------------------------------------------------------
+; Calcule la différence absolue en X, détermine le sens d'incrémentation SX
+; et initialise la variable d'erreur ERR à DX/2
 
-    ; ---- Calcul DX = abs(X1 - X0), SX, PIX_CPT, ERR ----
-    ldd     X1          ; D = X1
-    subd    X0          ; D = X1 - X0 (signé)
-    std     DX
-    bpl     DX_Pos
-    coma
-    comb
-    addd    #1
-    std     DX
-    lsra
+DrawLine:
+    pshs    d,x,y,u      ; Sauvegarde des registres sur la pile
+
+    ; Calcul de DX = |X1 - X0| et détermination de SX
+    ldd     X1           ; D = X1
+    subd    X0           ; D = X1 - X0 (différence signée)
+    std     DX           ; Sauvegarde temporaire de la différence
+    bpl     DX_Pos       ; Si positif, aller à DX_Pos
+    ; Si négatif, calculer la valeur absolue par complément à 2
+    coma                 ; Inverser tous les bits de A
+    comb                 ; Inverser tous les bits de B  
+    addd    #1           ; Ajouter 1 pour obtenir le complément à 2
+    std     DX           ; DX = |X1 - X0|
+    lsra                 ; ERR = DX / 2 (décalage à droite)
     rorb
-    std     ERR
-    lda     #$FF        ; SX = -1
+    std     ERR          ; Initialiser l'erreur Bresenham
+    lda     #$FF         ; SX = -1 (mouvement vers la gauche)
     sta     SX
-    bra     DY_Calc
+    bra     DY_Calc      ; Continuer avec le calcul de DY
 DX_Pos:
-    lsra
-    rorb
-    std     ERR
-    lda     #1
+    lsra                 ; ERR = DX / 2 (décalage à droite)
+    rorb  
+    std     ERR          ; Initialiser l'erreur Bresenham
+    lda     #1           ; SX = +1 (mouvement vers la droite)
     sta     SX
+
+;------------------------------------------------------------------------------
+; PHASE 2 : CALCUL DE DY ET SY  
+;------------------------------------------------------------------------------
+; Calcule la différence absolue en Y et détermine le sens d'incrémentation SY
 
 DY_Calc:
 
-    ; ---- Calcul DY = abs(Y1 - Y0), SY ----
-    ldd     Y1
-    subd    Y0
-    std     DY
-    bpl     DY_Pos
-    coma
-    comb
-    addd    #1
-    std     DY
-    lda     #$FF
+    ; Calcul de DY = |Y1 - Y0| et détermination de SY
+    ldd     Y1           ; D = Y1  
+    subd    Y0           ; D = Y1 - Y0 (différence signée)
+    std     DY           ; Sauvegarde temporaire de la différence
+    bpl     DY_Pos       ; Si positif, aller à DY_Pos
+    ; Si négatif, calculer la valeur absolue par complément à 2
+    coma                 ; Inverser tous les bits de A
+    comb                 ; Inverser tous les bits de B
+    addd    #1           ; Ajouter 1 pour obtenir le complément à 2  
+    std     DY           ; DY = |Y1 - Y0|
+    lda     #$FF         ; SY = -1 (mouvement vers le haut)
     sta     SY
-    bra     Dominant
+    bra     Dominant     ; Continuer avec le calcul d'adresse
 DY_Pos:
-    lda     #1
+    lda     #1           ; SY = +1 (mouvement vers le bas)
     sta     SY
+
+;------------------------------------------------------------------------------
+; PHASE 3 : CALCUL DE L'ADRESSE VRAM ET DU MASQUE PIXEL
+;------------------------------------------------------------------------------
+; Calcule l'adresse de l'octet VRAM contenant le pixel de départ
+; et génère le masque de bit correspondant à la position du pixel
 
 Dominant:
-; 1. Calcul adresse début de ligne : VRAM_BASE + Y*40
-    ldb     Y0+1            ; B = Y (0..199)
-    lda     #40
-    mul                     ; D = Y * 40
-    addd    #VRAM_BASE      ; D = adresse de début de la ligne
-    std     TMP             ; TMP = base de la ligne
+; Étape 3.1 : Calcul de l'adresse de début de ligne
+    ldb     Y0+1             ; B = coordonnée Y (octet bas, 0..199)
+    lda     #40              ; A = nombre d'octets par ligne
+    mul                      ; D = Y * 40 (adresse relative de la ligne)
+    addd    #VRAM_BASE       ; D = adresse absolue de début de ligne
+    std     TMP              ; TMP = adresse de base de la ligne
 
-; 2. Calcul de l'octet de colonne : (X/8) sur 16 bits
-    ldd     X0              ; D = X (0..319)
-    lsra                    ; décalage 1 bit à droite
-    rorb
-    lsrb                    ; décalage 2
-    lsrb                    ; décalage 3 => D = X / 8 (0..39)
-    addd    TMP             ; D = adresse exacte du pixel
-    std     ADDR            ; TODO: variable inutile ?
+; Étape 3.2 : Calcul de l'adresse de l'octet contenant le pixel  
+    ldd     X0               ; D = coordonnée X (0..319)
+    lsra                     ; Décalage à droite de 3 positions pour diviser par 8
+    rorb                     ; (rotation du bit de poids fort de A vers B)
+    lsrb                     ; Décalage à droite bit 2
+    lsrb                     ; Décalage à droite bit 3 => D = X ÷ 8 (0..39)
+    addd    TMP              ; D = adresse exacte de l'octet pixel
+    std     ADDR             ; ADDR = adresse VRAM de l'octet pixel
 
-; 3. Construction du masque de bit pour le pixel
-    ldb     X0+1            ; D = X
-    andb    #7              ; A = X MOD 8 (position du pixel dans octet)
+; Étape 3.3 : Construction du masque de bit pour le pixel
+    ldb     X0+1             ; B = coordonnée X (octet bas)
+    andb    #7               ; B = X MOD 8 (position du bit dans l'octet : 0..7)
 
-    ldx     #MASK_TABLE
-    lda     b,x
-    sta     MASK            ; masque prêt
+    ldx     #MASK_TABLE      ; X pointe sur la table des masques
+    lda     b,x              ; A = masque correspondant à la position
+    sta     MASK             ; MASK = masque de bit prêt pour l'affichage
 
-; ---- Registres DrawLine
-; x : X
-; y : Y
-; u : adresse VRAM
-    ldx     X0
-    ldy     Y0
-    ldu     ADDR
+;------------------------------------------------------------------------------
+; PHASE 4 : INITIALISATION DES REGISTRES DE TRACÉ
+;------------------------------------------------------------------------------
+; Initialise les registres X, Y, U pour le tracé de la ligne
 
-; ---- Comparaison DX vs DY ----
-    ldd     DX
-    cmpd    DY
-    bhs     X_Dom   ; DX >= DY → X dominant
+    ldx     X0               ; X = coordonnée X courante
+    ldy     Y0               ; Y = coordonnée Y courante  
+    ldu     ADDR             ; U = adresse VRAM courante
 
-; ----- Y dominant -----
+;------------------------------------------------------------------------------
+; PHASE 5 : SÉLECTION DE LA ROUTINE SELON L'OCTANT
+;------------------------------------------------------------------------------
+; Compare DX et DY pour déterminer l'axe dominant et sélectionner 
+; la routine optimisée correspondant à l'octant
+
+    ldd     DX               ; D = DX
+    cmpd    DY               ; Comparer DX avec DY
+    bhs     X_Dom            ; Si DX >= DY, X est dominant
+
+;==============================================================================
+; ROUTINES DE TRACÉ - Y DOMINANT
+;==============================================================================
+; Ces routines gèrent les cas où DY > DX (ligne plus verticale qu'horizontale)
+
 Y_Dom:
-    ldb     SX
-    bmi     Yd_Xm
-    ldb     SY
-    lbmi    DrawLine_YmXp_8    ; Y dominant, Y-, X+
-    lbra    DrawLine_YpXp_8    ; Y dominant, Y+, X+
+    ldb     SX               ; B = sens d'incrémentation X
+    bmi     Yd_Xm            ; Si SX < 0, aller vers les routines X-
+    ldb     SY               ; B = sens d'incrémentation Y  
+    lbmi    DrawLine_YmXp_8  ; Si SY < 0, octant Y dominant, Y-, X+
+    lbra    DrawLine_YpXp_8  ; Sinon, octant Y dominant, Y+, X+
 Yd_Xm:
-    ldb     SY
-    lbmi    DrawLine_YmXm_8    ; Y dominant, Y-, X-
-    lbra    DrawLine_YpXm_8    ; Y dominant, Y+, X-
+    ldb     SY               ; B = sens d'incrémentation Y
+    lbmi    DrawLine_YmXm_8  ; Si SY < 0, octant Y dominant, Y-, X-
+    lbra    DrawLine_YpXm_8  ; Sinon, octant Y dominant, Y+, X-
 
-; ----- X dominant -----
+;==============================================================================
+; ROUTINES DE TRACÉ - X DOMINANT  
+;==============================================================================
+; Ces routines gèrent les cas où DX >= DY (ligne plus horizontale que verticale)
+
 X_Dom:
-    ldb     SX
-    bmi     Xd_Xm
-    ldb     SY
-    bmi     DrawLine_XpYm_8    ; X+ dominant, Y-
-    bra     DrawLine_XpYp_8    ; X+ dominant, Y+
+    ldb     SX               ; B = sens d'incrémentation X
+    bmi     Xd_Xm            ; Si SX < 0, aller vers les routines X-
+    ldb     SY               ; B = sens d'incrémentation Y
+    bmi     DrawLine_XpYm_8  ; Si SY < 0, octant X dominant, X+, Y-
+    bra     DrawLine_XpYp_8  ; Sinon, octant X dominant, X+, Y+
 Xd_Xm:
-    ldb     SY
-    lbmi    DrawLine_XmYm_8    ; X- dominant, Y-
-    lbra    DrawLine_XmYp_8    ; X- dominant, Y+
+    ldb     SY               ; B = sens d'incrémentation Y
+    lbmi    DrawLine_XmYm_8  ; Si SY < 0, octant X dominant, X-, Y-
+    lbra    DrawLine_XmYp_8  ; Sinon, octant X dominant, X-, Y+
 
-; --- Octant X+ Y+  ---
+;==============================================================================
+; ROUTINE OCTANT X+ Y+ (X DOMINANT)
+;==============================================================================
+; Tracé optimisé pour les lignes se dirigeant vers la droite et le bas
+; avec X dominant (pente entre 0 et 45 degrés)
+
 DrawLine_XpYp_8:
-    lda     DX+1
-    inca
-    sta     PIX_CPT
-    lda     ,u
-    ldb     ERR+1
+    lda     DX+1             ; A = DX (octet bas, nombre de pixels à tracer)
+    inca                     ; A = DX + 1 (inclut le pixel de fin)
+    sta     PIX_CPT          ; PIX_CPT = compteur de pixels
+    lda     ,u               ; A = contenu de l'octet VRAM courant
+    ldb     ERR+1            ; B = variable d'erreur (octet bas)
 XpYp_Loop_8:
     ora     MASK
 
