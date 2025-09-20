@@ -1,27 +1,39 @@
-; =================================================================
-;  Thomson TO8 - Définitions des adresses hardware (I/O, VRAM, etc)
-;  (Pas d'adresses ni routines ROM ici)
-; =================================================================
+; ============================================================================
+; Thomson TO8 - Cartographie Hardware & Registres spéciaux (E7E4-E7FF inclus)
+; Basé sur le manuel technique TO8, docs DCMOTO/MAME, 2024
+; Exploitable 6809 assembly (big-endian). Registres détaillés, bits commentés.
+; ============================================================================
 
-; ----------------- VIA 1 (contrôle vidéo) -----------------
-VIA1_PORTA      equ $E7C0
-VIA1_PORTB      equ $E7C1
-VIA1_DDRA       equ $E7C2
-VIA1_DDRB       equ $E7C3
-VIA1_T1CL       equ $E7C4
-VIA1_T1CH       equ $E7C5
-VIA1_T1LL       equ $E7C6
-VIA1_T1LH       equ $E7C7
-VIA1_T2CL       equ $E7C8
-VIA1_T2CH       equ $E7C9
-VIA1_SR         equ $E7CA
-VIA1_ACR        equ $E7CB
-VIA1_PCR        equ $E7CC
-VIA1_IFR        equ $E7CD
-VIA1_IER        equ $E7CE
-VIA1_PORTA_NH   equ $E7CF
+; ---------------------------------------------------------------------------
+; 6522 VIA #1 (VIDEO) - $E7C0-$E7CF
+; ---------------------------------------------------------------------------
+VIA1_PORTA      equ $E7C0 ; [RW] Port A - Contrôle mode graphique/page affichée
+;   Bit 0-1 : Mode graphique
+;      00 = 320x200 16 couleurs
+;      01 = 320x200 4 couleurs
+;      10 = 160x200 16 couleurs
+;      11 = 160x200 4 couleurs
+;   Bit 2 : Page vidéo affichée (0: $C000, 1: $8000)
+;   Bit 3-7 : Réservés (toujours 0)
+VIA1_PORTB      equ $E7C1 ; [RW] Couleur bordure (bits 0-3)
+VIA1_DDRA       equ $E7C2 ; [RW] Direction Port A
+VIA1_DDRB       equ $E7C3 ; [RW] Direction Port B
+VIA1_T1CL       equ $E7C4 ; [RW] Timer 1 Counter Low
+VIA1_T1CH       equ $E7C5 ; [RW] Timer 1 Counter High
+VIA1_T1LL       equ $E7C6 ; [W]  Timer 1 Latch Low
+VIA1_T1LH       equ $E7C7 ; [W]  Timer 1 Latch High
+VIA1_T2CL       equ $E7C8 ; [RW] Timer 2 Counter Low
+VIA1_T2CH       equ $E7C9 ; [RW] Timer 2 Counter High
+VIA1_SR         equ $E7CA ; [RW] Shift Register
+VIA1_ACR        equ $E7CB ; [RW] Aux Control (timers, shift)
+VIA1_PCR        equ $E7CC ; [RW] Peripheral Control Register
+VIA1_IFR        equ $E7CD ; [R]  Interrupt Flag Register
+VIA1_IER        equ $E7CE ; [RW] Interrupt Enable Register
+VIA1_PORTA_NH   equ $E7CF ; [RW] Port A no handshake (non bufferisé)
 
-; --------- VIA 2 (ports extension, imprimante, K7) ---------
+; ---------------------------------------------------------------------------
+; 6522 VIA #2 (IMPRIMANTE/EXT/LEP) - $E7D0-$E7DF
+; ---------------------------------------------------------------------------
 VIA2_PORTA      equ $E7D0
 VIA2_PORTB      equ $E7D1
 VIA2_DDRA       equ $E7D2
@@ -39,51 +51,138 @@ VIA2_IFR        equ $E7DD
 VIA2_IER        equ $E7DE
 VIA2_PORTA_NH   equ $E7DF
 
-; ------------------- PPI (Clavier, etc) -------------------
-PPI_PORTA       equ $E7E0   ; Lecture clavier, souris, joystick
-PPI_PORTB       equ $E7E1   ; Ecriture clavier, joystick
-PPI_PORTC       equ $E7E2   ; Souris (position, boutons)
-PPI_CTRL        equ $E7E3   ; Contrôle du PPI
+; ---------------------------------------------------------------------------
+; 8255 PPI (CLAVIER/SOURIS/JOYSTICK) - $E7E0-$E7E3
+; ---------------------------------------------------------------------------
+PPI_PORTA       equ $E7E0 ; [R]  Clavier/Joystick A (lecture)
+PPI_PORTB       equ $E7E1 ; [W]  Lignes clavier/Joystick (écriture)
+PPI_PORTC       equ $E7E2 ; [R]  Souris (X, Y, boutons)
+PPI_CTRL        equ $E7E3 ; [W]  Contrôle PPI
 
-; -------------- Contrôle vidéo spécifique TO8 -------------
-VIDEO_MODE      equ $E7C0   ; Mode vidéo + page affichée (écriture)
-VIDEO_BORDER    equ $E7C1   ; Couleur de bordure
-VIDEO_PALETTE   equ $E7C2   ; Palette (écriture)
-VIDEO_PALETTE_RD equ $E7C3  ; Palette (lecture)
-VIDEO_SCROLL    equ $E7C4   ; Scroll vertical (320x200)
+; ---------------------------------------------------------------------------
+; ZONE MULTIPLEXÉE $E7E4-$E7E7 : GATE ARRAY, CRAYON OPTIQUE, etc.
+; Voir Manuel technique (pages 110-117, 129)
+; ---------------------------------------------------------------------------
+; Les adresses E7E4 à E7E7 sont MULTIPLEXÉES :
+;  - Lecture/écriture de registres système ET crayon optique.
+;  - Le registre de sélection lecture (bit D0 de E7EA) commute l'accès.
+; ---------------------------------------------------------------------------
+; Pour accès "régistres système" (D0 de E7EA = 0) :
+GA_SYS2         equ $E7E4 ; [R/W] Système 2: 
+;   D7-D6 : Numéro page physique affichée à l'écran (0-3)
+;   D5    : Masquage cartouche (MO, non utilisé TO8)
+;   D4    : Sélection BASIC (MO, non utilisé TO8)
+;   D3-D0 : Couleur du tour (P B V R, cf. palette)
 
-; --------------- Statut vidéo / VBL -----------------------
-VIDEO_STATUS    equ $E7E5   ; Bit 7=VBL, autres bits statut vidéo
+GA_DATA_RAM     equ $E7E5 ; [R/W] RAM Données (bank switching) :
+;   D7    : Autorisation écriture registre affichage (E7DC) si contrôleur externe
+;   D6-D5 : 0
+;   D4-D0 : Numéro de page RAM (0-31)
 
-; --------------- Audio / DAC / buzzer ---------------------
-SOUND_DAC       equ $E7E7   ; DAC 6 bits (sortie audio)
-SOUND_BELL      equ $E7E6   ; Commande buzzer
+GA_CART_RAM     equ $E7E6 ; [R/W] RAM Cartouche :
+;   D6    : Protection écriture page RAM cartouche (1=autorisé)
+;   D5    : 1=Espace cartouche recouvert par RAM (D4-D0)
+;   D4-D0 : Numéro page RAM pour cartouche
 
-; ------------- Contrôleur disquette / FDC -----------------
-FDC_COMMAND     equ $E7E8
-FDC_TRACK       equ $E7E9
-FDC_SECTOR      equ $E7EA
-FDC_DATA        equ $E7EB
-FDC_STATUS      equ $E7EC
+GA_SYS1         equ $E7E7 ; [W] Système 1 :
+;   D7    : Contrôleur disque (0=int, 1=ext)
+;   D6    : Gestion RAM cartouche (1=par registre E7E6)
+;   D5    : Standard vidéo (0=France/624l, 1=export/524l)
+;   D4    : Gestion RAM données (1=par registre E7E5)
+;   D3-D2 : Type machine (10=TO8)
+;   D1-D0 : Type RAM dynamique (00=256Kx1)
 
-; --------------- Ports extension / cartouche --------------
-CART_ROM        equ $B000   ; ROM cartouche externe (lecture)
-CART_IO         equ $E7F0   ; Registre I/O cartouche
+; Pour accès "crayon optique" (D0 de E7EA = 1) :
+;   E7E4 : Crayon optique 1 (T12-T5)
+;   E7E5 : Crayon optique 2 (T4-T0, E, H2, H4)
+;   E7E6 : Crayon optique 3 (flags position)
+;   E7E7 : Crayon optique 4 (INITN, drapeau FIRQN, etc.)
 
-; ------------------- RAM vidéo (VRAM) ---------------------
-VRAM_PAGE0      equ $C000   ; Page vidéo 0 (16 Ko)
-VRAM_PAGE1      equ $8000   ; Page vidéo 1 (16 Ko)
+; ---------------------------------------------------------------------------
+; AUTRES PÉRIPHÉRIQUES $E7E4-$E7EF
+; ---------------------------------------------------------------------------
+PRINTER_PORT    equ $E7E4 ; [W] Port imprimante (alias GA_SYS2 écriture)
+VIDEO_STATUS    equ $E7E5 ; [R] Statut vidéo : Bit 7=VBL, Bit 6=HBL
+SOUND_BELL      equ $E7E6 ; [W] Buzzer (alias GA_CART_RAM écriture)
+SOUND_DAC       equ $E7E7 ; [W] CNA 6 bits
 
-; --------------------- RAM centrale -----------------------
-RAM_START       equ $0000   ; Base RAM (jusqu'à 64 Ko selon config)
+; ---------------------------------------------------------------------------
+; CONTRÔLEUR DISQUETTE (FDC WD179X/THMFC1) - $E7E8-$E7EC
+; ---------------------------------------------------------------------------
+FDC_COMMAND     equ $E7E8 ; [R/W] Commande FDC
+FDC_TRACK       equ $E7E9 ; [R/W] Numéro de piste
+FDC_SECTOR      equ $E7EA ; [R/W] Numéro de secteur
+;     Bit 0 de FDC_SECTOR ($E7EA) = multiplexeur lecture "traitement/crayon optique"
+;     (D0=0: lecture registres système, D0=1: lecture crayon optique)
+FDC_DATA        equ $E7EB ; [R/W] Donnée
+FDC_STATUS      equ $E7EC ; [R]   Statut
 
-; -------------------- Ports divers ------------------------
-PRINTER_PORT    equ $E7E4   ; Port imprimante Centronics
-CASSETTE_PORT   equ $E7EE   ; Port cassette
+; ---------------------------------------------------------------------------
+; EXTENSIONS $E7ED-$E7EF
+; ---------------------------------------------------------------------------
+; Zone réservée extensions externes (très peu utilisée officiellement)
 
-; ---------------------- Divers ----------------------------
-RESET_IO        equ $E7FF   ; Reset général I/O (attention !)
+; ---------------------------------------------------------------------------
+; CARTOUCHE/EXTENSION $E7F0
+; ---------------------------------------------------------------------------
+CART_IO         equ $E7F0 ; [R/W] Registre extension/cartouche
 
-; =================================================================
-;  Fin du fichier hardware TO8 - Aucune adresse ROM ici !
-; =================================================================
+; ---------------------------------------------------------------------------
+; AUTRES EXTENSIONS $E7F1-$E7FE
+; ---------------------------------------------------------------------------
+; Zone extensions (rarement utilisée)
+
+; ---------------------------------------------------------------------------
+; RESET GENERAL I/O $E7FF
+; ---------------------------------------------------------------------------
+RESET_IO        equ $E7FF ; [W] Reset général I/O (tous périphériques !)
+
+; ---------------------------------------------------------------------------
+; REGISTRES VIDEO/PALETTE (EF9369)
+; ---------------------------------------------------------------------------
+PALETTE_DATA    equ $E7C2 ; [W] Donnée palette (16x12 bits, accès indirect)
+PALETTE_ADDR    equ $E7C3 ; [RW] Adresse palette sélectionnée (0-15)
+
+DISPLAY_CTRL    equ $E7DC ; [W] Contrôle affichage (mode, organisation, fréquence pixel)
+;   D7-D0 : cf. manuel technique p.124 pour les 9 modes (bitmap 4c, 16c, 80col, etc.)
+
+; ---------------------------------------------------------------------------
+; VRAM (DOUBLE BUFFER)
+; ---------------------------------------------------------------------------
+VRAM0           equ $C000 ; Page vidéo 0 (16 Ko)
+VRAM1           equ $8000 ; Page vidéo 1 (16 Ko)
+; Sélection par bit 2 de VIA1_PORTA ($E7C0)
+
+; ---------------------------------------------------------------------------
+; RAM CENTRALE UTILISATEUR
+; ---------------------------------------------------------------------------
+RAM_START       equ $0000 ; RAM (jusqu'à 64 Ko selon config)
+
+; ---------------------------------------------------------------------------
+; ROM CARTOUCHE (lecture seule)
+; ---------------------------------------------------------------------------
+CART_ROM        equ $B000 ; ROM externe (16 ou 32 Ko)
+
+; ============================================================================
+; CRAYON OPTIQUE (accès via multiplexeur $E7EA, cf. manuel p.114)
+; ============================================================================
+;   E7E4 : Crayon optique 1 (T12 à T5)
+;   E7E5 : Crayon optique 2 (T4 à T0, E, H2, H4)
+;   E7E6 : Crayon optique 3 (flags position cadre/fenêtre)
+;   E7E7 : Crayon optique 4 (INITN, INILN, drapeau FIRQN)
+;   Pour lire : mettre D0 de $E7EA à 1 puis lire E7E4..E7E7
+
+; ============================================================================
+; SYNTHÈSE DES BANCS, BANK SWITCHING, ETC.
+; ============================================================================
+; - Bank switching RAM "données" : GA_DATA_RAM ($E7E5)
+; - Bank switching cartouche :     GA_CART_RAM ($E7E6)
+; - Page vidéo affichée :          GA_SYS2 ($E7E4) bits 7-6
+; - Couleur tour écran :           GA_SYS2 ($E7E4) bits 3-0
+; - Protection écriture RAM cartouche : GA_CART_RAM ($E7E6) bit 6
+; - Standard vidéo (PAL/NTSC) :   GA_SYS1 ($E7E7) bit 5
+; - Contrôleur disquette interne/externe : GA_SYS1 ($E7E7) bit 7
+
+; ============================================================================
+; FIN CARTOGRAPHIE HARDWARE TO8
+; ============================================================================
