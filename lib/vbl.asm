@@ -2,6 +2,7 @@
 
 
 InitScreen:
+    pshs  a
     ; Map video RAM to $0000
     LDA  #%01100000  ; D7=0, D6=1 (écriture), D5=1 (RAM active), D4-D0=00000 (page 0)
     STA  $E7E6       ; Mappe la page 0 en $0000
@@ -9,6 +10,8 @@ InitScreen:
     ; Configuration Gate Array
     LDA  #%00000000  ; Couleur tour ecran
     STA  $E7DD       ; Registre systeme 2
+
+    puls a,pc
 
 
 ; === Routine d'attente VBL + switch buffer ===
