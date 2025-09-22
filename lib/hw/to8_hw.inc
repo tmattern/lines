@@ -59,6 +59,12 @@ PPI_PORTB       equ $E7E1 ; [W]  Lignes clavier/Joystick (écriture)
 PPI_PORTC       equ $E7E2 ; [R]  Souris (X, Y, boutons)
 PPI_CTRL        equ $E7E3 ; [W]  Contrôle PPI
 
+GA_SYS2         equ $E7DD ; [R/W] Système 2: 
+;   D7-D6 : Numéro page physique affichée à l'écran (0-3)
+;   D5    : Masquage cartouche (MO, non utilisé TO8)
+;   D4    : Sélection BASIC (MO, non utilisé TO8)
+;   D3-D0 : Couleur du tour (P B V R, cf. palette)
+
 ; ---------------------------------------------------------------------------
 ; ZONE MULTIPLEXÉE $E7E4-$E7E7 : GATE ARRAY, CRAYON OPTIQUE, etc.
 ; Voir Manuel technique (pages 110-117, 129)
@@ -68,11 +74,6 @@ PPI_CTRL        equ $E7E3 ; [W]  Contrôle PPI
 ;  - Le registre de sélection lecture (bit D0 de E7EA) commute l'accès.
 ; ---------------------------------------------------------------------------
 ; Pour accès "régistres système" (D0 de E7EA = 0) :
-GA_SYS2         equ $E7E4 ; [R/W] Système 2: 
-;   D7-D6 : Numéro page physique affichée à l'écran (0-3)
-;   D5    : Masquage cartouche (MO, non utilisé TO8)
-;   D4    : Sélection BASIC (MO, non utilisé TO8)
-;   D3-D0 : Couleur du tour (P B V R, cf. palette)
 
 GA_DATA_RAM     equ $E7E5 ; [R/W] RAM Données (bank switching) :
 ;   D7    : Autorisation écriture registre affichage (E7DC) si contrôleur externe
@@ -93,18 +94,11 @@ GA_SYS1         equ $E7E7 ; [W] Système 1 :
 ;   D1-D0 : Type RAM dynamique (00=256Kx1)
 
 ; Pour accès "crayon optique" (D0 de E7EA = 1) :
-;   E7E4 : Crayon optique 1 (T12-T5)
-;   E7E5 : Crayon optique 2 (T4-T0, E, H2, H4)
-;   E7E6 : Crayon optique 3 (flags position)
-;   E7E7 : Crayon optique 4 (INITN, drapeau FIRQN, etc.)
+LIGHT_PEN_1     equ $E7E4 ; Crayon optique 1 (T12-T5)
+LIGHT_PEN_2     equ $E7E5 ; Crayon optique 2 (T4-T0, E, H2, H4)
+LIGHT_PEN_3     equ $E7E6 ; Crayon optique 3 (flags position)
+LIGHT_PEN_4     equ $E7E7 ; Crayon optique 4 (INITN, drapeau FIRQN, etc.)
 
-; ---------------------------------------------------------------------------
-; AUTRES PÉRIPHÉRIQUES $E7E4-$E7EF
-; ---------------------------------------------------------------------------
-PRINTER_PORT    equ $E7E4 ; [W] Port imprimante (alias GA_SYS2 écriture)
-VIDEO_STATUS    equ $E7E5 ; [R] Statut vidéo : Bit 7=VBL, Bit 6=HBL
-SOUND_BELL      equ $E7E6 ; [W] Buzzer (alias GA_CART_RAM écriture)
-SOUND_DAC       equ $E7E7 ; [W] CNA 6 bits
 
 ; ---------------------------------------------------------------------------
 ; CONTRÔLEUR DISQUETTE (FDC WD179X/THMFC1) - $E7E8-$E7EC
@@ -116,11 +110,6 @@ FDC_SECTOR      equ $E7EA ; [R/W] Numéro de secteur
 ;     (D0=0: lecture registres système, D0=1: lecture crayon optique)
 FDC_DATA        equ $E7EB ; [R/W] Donnée
 FDC_STATUS      equ $E7EC ; [R]   Statut
-
-; ---------------------------------------------------------------------------
-; EXTENSIONS $E7ED-$E7EF
-; ---------------------------------------------------------------------------
-; Zone réservée extensions externes (très peu utilisée officiellement)
 
 ; ---------------------------------------------------------------------------
 ; CARTOUCHE/EXTENSION $E7F0
@@ -146,42 +135,6 @@ PALETTE_ADDR    equ $E7C3 ; [RW] Adresse palette sélectionnée (0-15)
 DISPLAY_CTRL    equ $E7DC ; [W] Contrôle affichage (mode, organisation, fréquence pixel)
 ;   D7-D0 : cf. manuel technique p.124 pour les 9 modes (bitmap 4c, 16c, 80col, etc.)
 
-; ---------------------------------------------------------------------------
-; VRAM (DOUBLE BUFFER)
-; ---------------------------------------------------------------------------
-VRAM0           equ $C000 ; Page vidéo 0 (16 Ko)
-VRAM1           equ $8000 ; Page vidéo 1 (16 Ko)
-; Sélection par bit 2 de VIA1_PORTA ($E7C0)
-
-; ---------------------------------------------------------------------------
-; RAM CENTRALE UTILISATEUR
-; ---------------------------------------------------------------------------
-RAM_START       equ $0000 ; RAM (jusqu'à 64 Ko selon config)
-
-; ---------------------------------------------------------------------------
-; ROM CARTOUCHE (lecture seule)
-; ---------------------------------------------------------------------------
-CART_ROM        equ $B000 ; ROM externe (16 ou 32 Ko)
-
-; ============================================================================
-; CRAYON OPTIQUE (accès via multiplexeur $E7EA, cf. manuel p.114)
-; ============================================================================
-;   E7E4 : Crayon optique 1 (T12 à T5)
-;   E7E5 : Crayon optique 2 (T4 à T0, E, H2, H4)
-;   E7E6 : Crayon optique 3 (flags position cadre/fenêtre)
-;   E7E7 : Crayon optique 4 (INITN, INILN, drapeau FIRQN)
-;   Pour lire : mettre D0 de $E7EA à 1 puis lire E7E4..E7E7
-
-; ============================================================================
-; SYNTHÈSE DES BANCS, BANK SWITCHING, ETC.
-; ============================================================================
-; - Bank switching RAM "données" : GA_DATA_RAM ($E7E5)
-; - Bank switching cartouche :     GA_CART_RAM ($E7E6)
-; - Page vidéo affichée :          GA_SYS2 ($E7E4) bits 7-6
-; - Couleur tour écran :           GA_SYS2 ($E7E4) bits 3-0
-; - Protection écriture RAM cartouche : GA_CART_RAM ($E7E6) bit 6
-; - Standard vidéo (PAL/NTSC) :   GA_SYS1 ($E7E7) bit 5
-; - Contrôleur disquette interne/externe : GA_SYS1 ($E7E7) bit 7
 
 ; ============================================================================
 ; FIN CARTOGRAPHIE HARDWARE TO8
