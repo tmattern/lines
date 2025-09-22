@@ -31,7 +31,7 @@
 ;   - Processeur     : Motorola 6809
 ;   - Résolution     : 320x200 pixels
 ;   - Profondeur     : 1 bit par pixel (monochrome)
-;   - Mémoire vidéo  : $4000-$5F3F (8000 octets)
+;   - Mémoire vidéo  : $0000-$1F3F (8000 octets)
 ;   - Page directe   : $61xx
 ;   - Assembleur     : lwasm compatible
 ;
@@ -58,12 +58,12 @@ X1VAL   equ $013F        ; Coordonnée X de fin pour les tests (319)
 Y1VAL   equ $00C7        ; Coordonnée Y de fin pour les tests (199)
 
 
-; Routine Bresenham optimisée pour 6809, 320x200, 1bpp, VRAM $4000
+; Routine Bresenham optimisée pour 6809, 320x200, 1bpp, VRAM $0000
 ; Entrées : X0, Y0, X1, Y1 (16 bits, page directe)
 ; Variables temporaires : DX, DY, SX, SY, ERR (16 bits), MASK (8 bits)
 ; Adresse VRAM de travail dans X
 ; Utilise : A, B, X, Y, U
-VRAM_BASE   equ $4000    ; Adresse de base de la mémoire vidéo
+VRAM_BASE   equ $0000    ; Adresse de base de la mémoire vidéo
 LINE_BYTES  equ 40       ; Nombre d'octets par ligne (320 pixels ÷ 8 bits/octet)
 
 
