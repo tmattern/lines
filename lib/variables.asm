@@ -24,3 +24,6 @@ MASK:   rmb     1        ; Masque de bit pour le pixel courant (8 bits : 128,64,
 ADDR:   rmb     2        ; Adresse VRAM de l'octet contenant le pixel courant (16 bits)
 TMP:    rmb     2        ; Variable temporaire pour calculs d'adresse (16 bits)
 PIX_CPT:rmb     1        ; Compteur de pixels à tracer (8 bits)
+
+saved_border_color   rmb 1
+current_page         rmb 1
