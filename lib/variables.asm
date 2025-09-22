@@ -28,3 +28,6 @@ PIX_CPT:rmb     1        ; Compteur de pixels à tracer (8 bits)
 saved_border_color   rmb 1
 current_page         rmb 1
 CLEAR_SCREEN_START rmb 2
+loop_1             rmb 1
+loop_2             rmb 2
+pointer_1          rmb 2

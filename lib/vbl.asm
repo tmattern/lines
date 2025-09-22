@@ -13,9 +13,9 @@ WaitVBLAndSwitchBuffer:
     pshs  a
 
     ; Changer couleur du tour pour debug (rouge = 2)
-    lda   $E7E4
-    ora   #2              ; Mets rouge (2)
-    sta   GA_SYS2
+    ;lda   $E7E4
+    ;ora   #2              ; Mets rouge (2)
+    ;sta   GA_SYS2
 
     ; -- Attendre que le bit 7 de VIDEO_STATUS passe à 1 (VBL active) --
 WaitVBL_Loop:

@@ -6,6 +6,8 @@
         lda     #$61
         tfr     a,dp
 
+        orcc    #$50
+
         jsr     InitScreen
 
         ; prepare buffer 1
@@ -23,15 +25,19 @@
         jsr     WaitVBLAndSwitchBuffer
 
 
-; --- Boucle de tracé ---
-Start:        
-        jsr     ClearScreenRAMA
+Restart:
         ldu     #LINES_TABLE
+        lda     #32
+        sta     loop_2
+; --- Boucle de tracé ---
+LoopList:        
+        jsr     ClearScreenRAMA
 
+        lda     #5
+        sta     loop_1
 LoopLines:
         ; Charger X0 (U pointe sur tableau)
         ldd     0,u
-        bmi     LoopEnd
         std     X0
         ; Charger Y0
         ldd     2,u
@@ -44,15 +50,17 @@ LoopLines:
         std     Y1
 
         jsr     DrawLine
-
         leau    8,u
 
-        bra     LoopLines
+        dec     loop_1
+        bne     LoopLines
 
 LoopEnd:
         jsr     WaitVBLAndSwitchBuffer
-        bra     Start
 
+        dec     loop_2
+        bne     LoopList
+        bra     Restart
 
         include "lib/bresenham.asm"
         include "lib/clear_screen.asm"
@@ -82,7 +90,6 @@ LINES_TABLE:
         FDB 160,100,225,152
         FDB 160,100,222,155
         FDB 160,100,219,157
-        FDB $FFFF,$FFFF,$FFFF,$FFFF
         FDB 160,100,217,160
         FDB 160,100,213,162
         FDB 160,100,210,164
