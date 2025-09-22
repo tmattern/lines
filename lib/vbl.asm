@@ -1,6 +1,3 @@
-; === Variables en page directe ===
-
-
 InitScreen:
     pshs  a
     ; Map video RAM to $0000
@@ -15,43 +12,60 @@ InitScreen:
 
 
 ; === Routine d'attente VBL + switch buffer ===
-
 WaitVBLAndSwitchBuffer:
     pshs  a
-    ; -- Attendre que le bit 7 de $E7E5 passe à 1 (VBL active) --
+
+    ; Sauver couleur du tour (D3-D0 de GA_SYS2)
+    lda   GA_SYS2
+    anda  #$0F            ; Garde bits couleur tour
+    sta   saved_border_color
+
+    ; Changer couleur du tour pour debug (rouge = 2)
+    lda   GA_SYS2
+    anda  #$F0            ; Efface bits couleur tour
+    ora   #2              ; Mets rouge (2)
+    sta   GA_SYS2
+
+    ; -- Attendre que le bit 7 de VIDEO_STATUS passe à 1 (VBL active) --
 WaitVBL_Loop:
-    lda   $E7E5
-    bpl   WaitVBL_Loop   ; Tant que bit 7=0, on boucle (attend VBL)
+    lda   LIGHT_PEN_4
+    bpl   WaitVBL_Loop
 
     ; -- Attendre la fin de VBL (évite plusieurs déclenchements) --
 WaitVBL_End:
-    lda   $E7E5
-    bmi   WaitVBL_End    ; Tant que bit 7=1, on boucle (attend sortie VBL)
+    lda   LIGHT_PEN_4
+    bmi   WaitVBL_End
 
     ; -- Inverser la page --
     lda   current_page
-    eora  #1             ; inverse 0<->1
+    eora  #1
     sta   current_page
     bne   WaitVBL_AffichePage1_MappePage0Cartouche
 
 WaitVBL_AffichePage0_MappePage1Cartouche:
-    lda   $E7E4        ; Lire configuration actuelle (bordure/couleur)
-    anda  #$3F         ; Effacer D7-D6 (page affichée)
-    sta   $E7E4        ; Affiche page 0, bordure inchangée
+    lda   GA_SYS2
+    anda  #$3F
+    sta   GA_SYS2
 
-    lda   #$61         ; %0110 0001 : D6=1 écriture autorisée, D5=1 RAM, D4-D0=1 (page 1)
-    sta   $E7E6        ; Mappe RAM page 1 dans espace cartouche
+    lda   #%01100001
+    sta   GA_CART_RAM
 
-    bra  WaitVBL_Exit
+    bra   WaitVBL_RestoreBorder
 
 WaitVBL_AffichePage1_MappePage0Cartouche:
-    lda   $E7E4        ; Lire configuration actuelle (bordure/couleur)
-    anda  #$3F         ; Effacer D7-D6 (page affichée)
-    ora   #$40         ; Mettre D7-D6 = 01 (page 1)
-    sta   $E7E4        ; Affiche page 1, bordure inchangée
+    lda   GA_SYS2
+    anda  #$3F
+    ora   #$40
+    sta   GA_SYS2
 
-    lda   #$60         ; %0110 0000 : D6=1 écriture autorisée, D5=1 RAM, D4-D0=0 (page 0)
-    sta   $E7E6        ; Mappe RAM page 0 dans espace cartouche
+    lda   #%01100000
+    sta   GA_CART_RAM
 
-WaitVBL_Exit:
+WaitVBL_RestoreBorder:
+    ; Remettre la couleur du tour originale
+    lda   GA_SYS2
+    anda  #$F0            ; Efface bits couleur tour
+    ora   saved_border_color
+    sta   GA_SYS2
+
     puls  a,pc
