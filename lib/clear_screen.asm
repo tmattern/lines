@@ -3,9 +3,53 @@
 ; Utilise : X, A uniquement
 ;==============================================================================
 
+; Entrée : A = aaaabbbb
+; Sortie : B = baaaabbb
 
-ClearScreen:
+TranscodeRamb:
+    pshs  b
+    eora  #%10001000   ; echange Pastel / Saturation
+    sta   TMP
+    clrb
+
+    lsra
+    rorb
+
+    lsra
+    rorb
+
+    lsra
+    rorb
+
+    lsra
+
+    lsra
+    rorb
+
+    lsra
+    rorb
+
+    lsra
+    rorb
+
+    lsra
+    rorb
+    lsrb
+
+    lda   TMP
+    bita  #%00001000
+    beq   TranscodeRambEnd
+    orb   #$80
+
+TranscodeRambEnd:
+    tfr   b,a
+    puls  b,pc
+
+
+ClearScreenRAMA:
     pshs  a,b,x,y,u,cc
+    ldu   #$0000
+    stu   CLEAR_SCREEN_START
     orcc  #$50
     sts   STACK
     ldd   #0
@@ -13,6 +57,22 @@ ClearScreen:
     ldy   #0
     ldu   #0
     lds   #$1F40
+    bra   CS_Loop
+
+; pattern dans le registre A
+ClearScreenRAMB:
+    pshs  a,b,x,y,u,cc
+    ldu   #$2000
+    stu   CLEAR_SCREEN_START
+    orcc  #$50
+    sts   STACK
+    tfr   a,b
+    tfr   d,x
+    tfr   d,y
+    tfr   d,u
+    lds   #$3F40
+    bra   CS_Loop
+
     
 CS_Loop:
     ; ligne 1
@@ -50,7 +110,7 @@ CS_Loop:
     pshs  a,b,x,y,u
     pshs  a,b,x,y,u
 
-    cmps  #$0000
+    cmps  CLEAR_SCREEN_START
     bne   CS_Loop
     lds   STACK
     puls  a,b,x,y,u,cc,pc

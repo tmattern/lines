@@ -1,15 +1,31 @@
+        include "lib/hw/to8_hw.inc"
+        include "lib/hw/to8_rom.inc"
         include "lib/variables.asm"
 
         org     $A000
+        lda     #$61
+        tfr     a,dp
+
+        jsr     InitScreen
+
+        ; prepare buffer 1
+        jsr     ClearScreenRAMA
+        lda     #COLOR_WHITE*16 + #COLOR_BLACK
+        jsr     TranscodeRamb
+        jsr     ClearScreenRAMB
+        jsr     WaitVBLAndSwitchBuffer
+
+        ; prepare buffer 2
+        jsr     ClearScreenRAMA
+        lda     #COLOR_WHITE*16 + #COLOR_BLACK
+        jsr     TranscodeRamb
+        jsr     ClearScreenRAMB
+        jsr     WaitVBLAndSwitchBuffer
 
 
 ; --- Boucle de tracé ---
-Start:
-        lda     #$61
-        tfr     a,dp
-        
-        jsr     ClearScreen
-
+Start:        
+        jsr     ClearScreenRAMA
         ldu     #LINES_TABLE
 
 LoopLines:
@@ -30,14 +46,17 @@ LoopLines:
         jsr     DrawLine
 
         leau    8,u
+
         bra     LoopLines
 
 LoopEnd:
+        jsr     WaitVBLAndSwitchBuffer
         bra     Start
 
 
         include "lib/bresenham.asm"
         include "lib/clear_screen.asm"
+        include "lib/vbl.asm"
 
 
 LINES_TABLE:

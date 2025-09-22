@@ -1,28 +1,19 @@
 InitScreen:
-    pshs  a
-    ; Map video RAM to $0000
-    LDA  #%01100000  ; D7=0, D6=1 (écriture), D5=1 (RAM active), D4-D0=00000 (page 0)
-    STA  $E7E6       ; Mappe la page 0 en $0000
+    pshs   a
+    clr    current_page
 
-    ; Configuration Gate Array
-    LDA  #%00000000  ; Couleur tour ecran
-    STA  $E7DD       ; Registre systeme 2
+    LDA     #%00000000  ; mode TO7/70 sans l'horrible transcodage en ramb
+    STA     DISPLAY_CTRL
 
-    puls a,pc
+    bra    WaitVBL_AffichePage0_MappePage3Cartouche
 
 
 ; === Routine d'attente VBL + switch buffer ===
 WaitVBLAndSwitchBuffer:
     pshs  a
 
-    ; Sauver couleur du tour (D3-D0 de GA_SYS2)
-    lda   GA_SYS2
-    anda  #$0F            ; Garde bits couleur tour
-    sta   saved_border_color
-
     ; Changer couleur du tour pour debug (rouge = 2)
-    lda   GA_SYS2
-    anda  #$F0            ; Efface bits couleur tour
+    lda   $E7E4
     ora   #2              ; Mets rouge (2)
     sta   GA_SYS2
 
@@ -40,32 +31,20 @@ WaitVBL_End:
     lda   current_page
     eora  #1
     sta   current_page
-    bne   WaitVBL_AffichePage1_MappePage0Cartouche
+    bne   WaitVBL_AffichePage3_MappePage0Cartouche
 
-WaitVBL_AffichePage0_MappePage1Cartouche:
-    lda   GA_SYS2
-    anda  #$3F
+WaitVBL_AffichePage0_MappePage3Cartouche:
+    lda   #%00000000
     sta   GA_SYS2
 
-    lda   #%01100001
+    lda   #%01100011
     sta   GA_CART_RAM
+    puls  a,pc
 
-    bra   WaitVBL_RestoreBorder
-
-WaitVBL_AffichePage1_MappePage0Cartouche:
-    lda   GA_SYS2
-    anda  #$3F
-    ora   #$40
+WaitVBL_AffichePage3_MappePage0Cartouche:
+    lda   #%11000000
     sta   GA_SYS2
 
     lda   #%01100000
     sta   GA_CART_RAM
-
-WaitVBL_RestoreBorder:
-    ; Remettre la couleur du tour originale
-    lda   GA_SYS2
-    anda  #$F0            ; Efface bits couleur tour
-    ora   saved_border_color
-    sta   GA_SYS2
-
     puls  a,pc

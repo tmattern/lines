@@ -4,6 +4,24 @@
 ; Exploitable 6809 assembly (big-endian). Registres détaillés, bits commentés.
 ; ============================================================================
 
+; TO7/70 PALETTE (hardware order)
+COLOR_BLACK         equ $0   ; Black
+COLOR_RED           equ $1   ; Red
+COLOR_GREEN         equ $2   ; Green
+COLOR_YELLOW        equ $3   ; Yellow
+COLOR_BLUE          equ $4   ; Blue
+COLOR_MAGENTA       equ $5   ; Magenta
+COLOR_CYAN          equ $6   ; Cyan
+COLOR_WHITE         equ $7   ; White
+COLOR_GREY          equ $8   ; Grey
+COLOR_ORANGE        equ $9   ; Orange
+COLOR_LIGHT_GREEN   equ $A   ; Light Green
+COLOR_LIGHT_YELLOW  equ $B   ; Light Yellow
+COLOR_LIGHT_BLUE    equ $C   ; Light Blue
+COLOR_LIGHT_MAGENTA equ $D   ; Light Magenta
+COLOR_LIGHT_CYAN    equ $E   ; Light Cyan
+COLOR_BRIGHT_WHITE  equ $F   ; Bright White
+
 ; ---------------------------------------------------------------------------
 ; 6522 VIA #1 (VIDEO) - $E7C0-$E7CF
 ; ---------------------------------------------------------------------------
