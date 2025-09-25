@@ -25,6 +25,19 @@ ADDR:   rmb     2        ; Adresse VRAM de l'octet contenant le pixel courant (1
 TMP:    rmb     2        ; Variable temporaire pour calculs d'adresse (16 bits)
 PIX_CPT:rmb     1        ; Compteur de pixels à tracer (8 bits)
 
+;--- Variables temporaires moteur 3D ---
+d3_obj3d_ptr      rmb 2
+d3_obj2d_ptr      rmb 2
+d3_pt_count       rmb 1
+d3_n_edges        rmb 1
+d3_x3d            rmb 1
+d3_y3d            rmb 1
+d3_z3d            rmb 1
+d3_scaling_index  rmb 1
+d3_tmpptr         rmb 2
+d3_scaling        rmb 1
+d3_camera_offset  rmb 1
+
 saved_border_color   rmb 1
 current_page         rmb 1
 CLEAR_SCREEN_START rmb 2

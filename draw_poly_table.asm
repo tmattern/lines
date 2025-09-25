@@ -27,30 +27,50 @@
 
 Restart:
         ldu     #LINES_TABLE
-        lda     #32
+        lda     #127
         sta     loop_2
+        adda    #11
+        sta     d3_camera_offset
+
 ; --- Boucle de tracé ---
 LoopList:        
         jsr     ClearScreenRAMA
 
-        lda     #5
+        ldx     #cube3d
+        ldy     #cube2d
+        jsr     project3d_to_2d
+
+        lda     1,y       ; nb edges
         sta     loop_1
+        ldu     2,y       ; points
+        ldx     4,y       ; edges
+
 LoopLines:
         ; Charger X0 (U pointe sur tableau)
-        ldd     0,u
-        std     X0
+        lda     ,x+
+        lsla
+        lsla
+        ldy     a,u
+        sty     X0
+
         ; Charger Y0
-        ldd     2,u
-        std     Y0
+        adda    #2
+        ldy     a,u
+        sty     Y0
+
         ; Charger X1
-        ldd     4,u
-        std     X1
+        lda     ,x+
+        lsla
+        lsla
+        ldy     a,u
+        sty     X1
+
         ; Charger Y1
-        ldd     6,u
-        std     Y1
+        adda    #2
+        ldy     a,u
+        sty     Y1
 
         jsr     DrawLine
-        leau    8,u
 
         dec     loop_1
         bne     LoopLines
@@ -58,6 +78,8 @@ LoopLines:
 LoopEnd:
         jsr     WaitVBLAndSwitchBuffer
 
+        dec     d3_camera_offset
+        
         dec     loop_2
         bne     LoopList
         bra     Restart
@@ -65,6 +87,8 @@ LoopEnd:
         include "lib/bresenham.asm"
         include "lib/clear_screen.asm"
         include "lib/vbl.asm"
+        include "3d/cube.inc"
+        include "3d/rendering.inc"
 
 
 LINES_TABLE:
