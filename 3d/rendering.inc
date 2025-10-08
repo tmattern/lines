@@ -12,13 +12,13 @@
 ;       D3_SCREEN_CY = 100
 ;-------------------------------------------
 
-D3_CAMERA_OFFSET  equ 20
+D3_CAMERA_OFFSET  equ 10
 D3_SCREEN_CX      equ 160
 D3_SCREEN_CY      equ 100
 
 
 project3d_to_2d:
-    PSHS  X,Y,U
+    PSHS  A,B,X,Y,U
 
     ; -- Recopie n_points et n_edges (1 octet chacun) --
     LDA   0,X       ; nb points
@@ -28,23 +28,26 @@ project3d_to_2d:
 
     ; -- Boucle points 3D -> 2D --
     LDB   d3_pt_count
-    BEQ   d3d_done_pts
+    LBEQ   d3d_done_pts
 
     LDU   2,X       ; pointeur sur le tableau de point 3d
     LDY   2,Y       ; pointeur sur le tableau de point 2d
 d3d_pt_loop:
-    LDA   0,U       ; point 3d: X
-    STA   d3_x3d
-    LDA   1,U       ; point 3d: Y
-    STA   d3_y3d
-    LDA   2,U       ; point 3d: Z
-    STA   d3_z3d
+    LDD   0,U       ; point 3d: X
+    STD   d3_x3d
+    LDD   2,U       ; point 3d: Y
+    STD   d3_y3d
+    LDD   4,U       ; point 3d: Z
+    STD   d3_z3d
 
-    ; -- Calcul index scaling : Z + D3_CAMERA_OFFSET --
+    ; -- Calcul index scaling : (Z + D3_CAMERA_OFFSET) * 4 --
     ADDA  d3_camera_offset
+    LSLB  ; multiply D by 4
+    ROLA
+    ; index in A
 
     ; Clamp à [0,127]
-    BMI   d3d_zero
+    LBMI   d3d_zero
 d3d_ok:
     LDX   #d3_scaling_table
     LDB   A,X      ; B = scaling (8.8)
@@ -53,63 +56,99 @@ d3d_ok:
     ; -- Projection X : X2D = (X3D * scaling)>>8 + D3_SCREEN_CX --
     LDA   d3_x3d
     BPL   d3_xpos
-    NEGA
+    LDB   d3_x3d+1
+
+    ; D = -D
+    COMA
+    COMB
+    ADDD  #1
+    STD   d3_abs
+
+    ; 8.8 x 8 => 16
+    LDA   d3_abs+1            ; LSB
+    LDB   d3_scaling
     MUL                       ; D = X3D * scaling en 8.8
-    LSLB
-    ROLA
-    LSLB
-    ROLA
-    LSLB
-    ROLA
-    NEGA
+    STA   d3_temp             ; do not need LSB of the result
+    LDA   d3_abs              ; MSB
+    LDB   d3_scaling
+    MUL                       ; D = X3D * scaling en 8.8
+    ADDB  d3_temp
+    ADCA  #0
+
+    ; D = -D
+    COMA
+    COMB
+    ADDD  #1
+    STD   d3_abs
+
     BRA   d3_xresult
 d3_xpos:
+    ; 8.8 x 8 => 16
+    LDA   d3_x3d+1            ; LSB
+    LDB   d3_scaling
     MUL                       ; D = X3D * scaling en 8.8
-    LSLB
-    ROLA
-    LSLB
-    ROLA
-    LSLB
-    ROLA
+    STA   d3_temp                ; do not need LSB of the result
+    LDA   d3_x3d              ; MSB
+    LDB   d3_scaling
+    MUL                       ; D = X3D * scaling en 8.8
+    ADDB  d3_temp
+    ADCA  #0
+
 d3_xresult:
-    TFR   A,B
-    SEX
     ADDD  #D3_SCREEN_CX       ; Ajoute centre écran
     STD   0,Y                 ; point 2d: stocke X
 
-    ; -- Projection Y : Y2D = (Y3D * scaling)>>8 + D3_SCREEN_CY --
-    LDB   d3_scaling
+
+    ; -- Projection Y : X2D = (Y3D * scaling)>>8 + D3_SCREEN_CY --
     LDA   d3_y3d
     BPL   d3_ypos
-    NEGA
+    LDB   d3_y3d+1
+
+    ; D = -D
+    COMA
+    COMB
+    ADDD  #1
+    STD   d3_abs
+
+    ; 8.8 x 8 => 16
+    LDA   d3_abs+1            ; LSB
+    LDB   d3_scaling
     MUL                       ; D = Y3D * scaling en 8.8
-    LSLB
-    ROLA
-    LSLB
-    ROLA
-    LSLB
-    ROLA
-    NEGA
+    STA   d3_temp             ; do not need LSB of the result
+    LDA   d3_abs              ; MSB
+    LDB   d3_scaling
+    MUL                       ; D = Y3D * scaling en 8.8
+    ADDB  d3_temp
+    ADCA  #0
+
+    ; D = -D
+    COMA
+    COMB
+    ADDD  #1
+    STD   d3_abs
+
     BRA   d3_yresult
 d3_ypos:
+    ; 8.8 x 8 => 16
+    LDA   d3_y3d+1            ; LSB
+    LDB   d3_scaling
     MUL                       ; D = Y3D * scaling en 8.8
-    LSLB
-    ROLA
-    LSLB
-    ROLA
-    LSLB
-    ROLA
+    STA   d3_temp             ; do not need LSB of the result
+    LDA   d3_y3d              ; MSB
+    LDB   d3_scaling
+    MUL                       ; D = Y3D * scaling en 8.8
+    ADDB  d3_temp
+    ADCA  #0
+
 d3_yresult:
-    TFR   A,B
-    SEX
     ADDD  #D3_SCREEN_CY
     STD   2,Y                 ; point 2d: stocke Y
 
 d3d_pt_next:
-    LEAU  3,U                 ; point 3D suivant
+    LEAU  6,U                 ; point 3D suivant
     LEAY  4,Y                 ; point 2D suivant
     DEC   d3_pt_count
-    BNE   d3d_pt_loop
+    LBNE  d3d_pt_loop
     BRA   d3d_done_pts
 
 d3d_zero:
@@ -122,7 +161,7 @@ d3d_zero:
 
 d3d_done_pts:
 d3d_done:
-    PULS  X,Y,U,PC
+    PULS  A,B,X,Y,U,PC
 
 ;-------------------------------------------
 d3_scaling_table:

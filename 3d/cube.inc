@@ -13,16 +13,15 @@ struct3d:
     fdb 0           ; edges_ptr
 
 ; --- Table des points (chaque point: X, Y, Z en fixed 8.8, 6 octets/point) ---
-; Exemple de points pour un cube:
 cube_3d_points:
-    fcb -10,-10,-10  ; 0
-    fcb  10,-10,-10  ; 1
-    fcb  10,10,-10   ; 2
-    fcb -10,10,-10   ; 3
-    fcb -10,-10,10   ; 4
-    fcb  10,-10,10   ; 5
-    fcb  10,10,10    ; 6
-    fcb -10,10,10    ; 7
+    fdb $FF00,$FF00,$FF00  ; 0
+    fdb $0100,$FF00,$FF00  ; 1
+    fdb $0100,$0100,$FF00  ; 2
+    fdb $FF00,$0100,$FF00  ; 3
+    fdb $FF00,$FF00,$0100  ; 4
+    fdb $0100,$FF00,$0100  ; 5
+    fdb $0100,$0100,$0100  ; 6
+    fdb $FF00,$0100,$0100  ; 7
 
 cube_2d_points:
     rmb 2*2*8

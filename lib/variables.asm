@@ -30,13 +30,15 @@ d3_obj3d_ptr      rmb 2
 d3_obj2d_ptr      rmb 2
 d3_pt_count       rmb 1
 d3_n_edges        rmb 1
-d3_x3d            rmb 1
-d3_y3d            rmb 1
-d3_z3d            rmb 1
+d3_x3d            rmb 2
+d3_y3d            rmb 2
+d3_z3d            rmb 2
 d3_scaling_index  rmb 1
 d3_tmpptr         rmb 2
 d3_scaling        rmb 1
 d3_camera_offset  rmb 1
+d3_abs            rmb 2
+d3_temp           rmb 1
 
 saved_border_color   rmb 1
 current_page         rmb 1
